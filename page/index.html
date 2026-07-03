@@ -2596,20 +2596,33 @@ function loginGDrive() {
             if (pendingImages.length > 0) {
                 const totalSteps = pendingImages.length;
                 let restoredCount = 0;
+                let failCount = 0;
+                let quotaWarnShown = false;
                 const RESTORE_CONCURRENCY = 3;
                 for (let i = 0; i < pendingImages.length; i += RESTORE_CONCURRENCY) {
                     if (gdriveSyncCancelled) throw new DOMException('已取消', 'AbortError');
                     const batch = pendingImages.slice(i, i + RESTORE_CONCURRENCY);
                     await Promise.all(batch.map(async (img) => {
-                        try { await putImageBlobToDB(img); } catch (e) { console.warn('恢复图片失败', e); }
+                        try { await putImageBlobToDB(img); } catch (e) {
+                            console.warn('恢复图片失败', e);
+                            failCount++;
+                            if (!quotaWarnShown && (e.name === 'QuotaExceededError' || e.message?.includes('quota') || e.message?.includes('Quota'))) {
+                                quotaWarnShown = true;
+                                showToast('⚠️ 浏览器存储空间不足，部分图片无法恢复', true);
+                            }
+                        }
                     }));
                     restoredCount += batch.length;
                     const batchIds = batch.map(img => String(img.id));
                     const meta = getGDriveRestoreMeta();
                     meta.restoredImageIds = Array.from(new Set([...(meta.restoredImageIds || []), ...batchIds]));
                     saveGDriveRestoreMeta(meta);
-                    updateProgress(restoredCount, totalSteps, 0, 0, `恢复图片 ${restoredCount}/${pendingImages.length}`);
+                    const phaseText = failCount > 0 ? `图片 ${restoredCount}/${pendingImages.length} (失败 ${failCount})` : `图片 ${restoredCount}/${pendingImages.length}`;
+                    updateProgress(restoredCount, totalSteps, 0, 0, phaseText);
                     await new Promise(r => setTimeout(r, 50));
+                }
+                if (failCount > 0) {
+                    document.getElementById('gdriveStatus').textContent += ` (${failCount} 张图片因存储空间不足跳过)`;
                 }
             }
             document.getElementById('gdriveStatus').textContent = `✅ ${actionLabel}成功 (${new Date().toLocaleString()})`;
