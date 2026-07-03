@@ -10,7 +10,7 @@ const path = require('path');
 const os = require('os');
 
 const PORT = 3000;
-const WEB_ROOT = __dirname; // 当前目录
+const WEB_ROOT = path.join(__dirname, '..'); // 项目根目录
 const ALLOWED_HOSTS = ['user.mypikpak.com', 'api-drive.mypikpak.com', 'api.mypikpak.com', 'mypikpak.com'];
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -86,7 +86,7 @@ const server = http.createServer((req, res) => {
   }
 
   // ======= 3. 静态文件服务 =======
-  let filePath = parsed.pathname === '/' ? '/offlinedown.html' : parsed.pathname;
+  let filePath = parsed.pathname === '/' ? '/page/index.html' : parsed.pathname;
   filePath = path.join(WEB_ROOT, filePath);
 
   // 安全：禁止跳出当前目录
