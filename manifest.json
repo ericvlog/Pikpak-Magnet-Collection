@@ -1,0 +1,44 @@
+{
+  "manifest_version": 3,
+  "name": "磁力管理器 · 图片助手",
+  "version": "2.1",
+  "description": "为磁力管理器提供图片代理、PikPak 离线、任意网页磁力预览与快速保存，支持 Token 自动刷新（内部登录）",
+  "permissions": [
+    "storage",
+    "cookies",
+    "alarms",
+    "downloads",
+    "scripting",
+    "tabs"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["magnet-detector.js"],
+      "run_at": "document_end",
+      "exclude_matches": ["https://ericvlog.github.io/MagnetManager/*"]
+    }
+  ],
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/*"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
