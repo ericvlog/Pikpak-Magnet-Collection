@@ -960,7 +960,7 @@
     function openDB() { return new Promise((resolve, reject) => { const request = indexedDB.open(DB_NAME, DB_VERSION); request.onerror = () => reject(request.error); request.onsuccess = () => { db = request.result; resolve(db); }; request.onupgradeneeded = (event) => { const db = event.target.result; if (!db.objectStoreNames.contains(STORES.tags)) db.createObjectStore(STORES.tags, { keyPath: 'id' }); if (!db.objectStoreNames.contains(STORES.magnets)) db.createObjectStore(STORES.magnets, { keyPath: 'id' }); if (!db.objectStoreNames.contains(STORES.autoTagRules)) db.createObjectStore(STORES.autoTagRules, { keyPath: 'id', autoIncrement: true }); if (!db.objectStoreNames.contains(STORES.filterWords)) db.createObjectStore(STORES.filterWords, { keyPath: 'id', autoIncrement: true }); if (!db.objectStoreNames.contains(STORES.images)) db.createObjectStore(STORES.images, { keyPath: 'id' }); if (!db.objectStoreNames.contains(STORES.failList)) db.createObjectStore(STORES.failList, { keyPath: 'cardId' }); }; }); }
     function saveFilterWordsToDB() { if (!db) return Promise.reject(); return new Promise((resolve, reject) => { const tx = db.transaction([STORES.filterWords], 'readwrite'); const store = tx.objectStore(STORES.filterWords); const clearReq = store.clear(); clearReq.onsuccess = () => { let completed = 0; if (filterWords.length === 0) { resolve(); return; } for (let i = 0; i < filterWords.length; i++) { const req = store.put({ id: i, word: filterWords[i] }); req.onsuccess = () => { completed++; if (completed === filterWords.length) resolve(); }; req.onerror = (e) => reject(e.target.error); } }; clearReq.onerror = (e) => reject(e.target.error); }); }
     function loadFilterWordsFromDB() { if (!db) return Promise.reject(); return new Promise((resolve, reject) => { const tx = db.transaction([STORES.filterWords], 'readonly'); const store = tx.objectStore(STORES.filterWords); const req = store.getAll(); req.onsuccess = () => { filterWords = req.result.map(item => item.word).filter(w => w && w.trim() !== ''); resolve(); }; req.onerror = (e) => reject(e.target.error); }); }
-    function saveToDB() { return new Promise((resolve, reject) => { if (!db) { reject(new Error('Database not initialized')); return; } const tx = db.transaction([STORES.tags, STORES.magnets, STORES.autoTagRules], 'readwrite'); const tagsStore = tx.objectStore(STORES.tags); const magnetsStore = tx.objectStore(STORES.magnets); const rulesStore = tx.objectStore(STORES.autoTagRules); const clearTags = tagsStore.clear(); const clearMagnets = magnetsStore.clear(); const clearRules = rulesStore.clear(); let allCleared = 0; function checkCompleted() { allCleared++; if (allCleared === 3) { for (const tag of tags) tagsStore.put(tag); for (const magnet of magnets) magnetsStore.put(magnet); for (let i = 0; i < autoTagRules.length; i++) rulesStore.put({ id: i, keyword: autoTagRules[i].keyword, tagId: autoTagRules[i].tagId }); tx.oncomplete = () => { updateTagOrderFromTags(); saveFilterWordsToDB().then(resolve).catch(reject); }; tx.onerror = (e) => reject(e.target.error); } } clearTags.onsuccess = checkCompleted; clearMagnets.onsuccess = checkCompleted; clearRules.onsuccess = checkCompleted; }); }
+    function saveToDB() { return new Promise((resolve, reject) => { if (!db) { reject(new Error('Database not initialized')); return; } const tx = db.transaction([STORES.tags, STORES.magnets, STORES.autoTagRules], 'readwrite'); const tagsStore = tx.objectStore(STORES.tags); const magnetsStore = tx.objectStore(STORES.magnets); const rulesStore = tx.objectStore(STORES.autoTagRules); const clearTags = tagsStore.clear(); const clearMagnets = magnetsStore.clear(); const clearRules = rulesStore.clear(); let allCleared = 0; let writeFailed = false; function checkCompleted() { allCleared++; if (allCleared === 3 && !writeFailed) { for (const tag of tags) { try { tagsStore.put(tag); } catch(e) { writeFailed = true; reject(e); return; } } for (const magnet of magnets) { try { magnetsStore.put(magnet); } catch(e) { writeFailed = true; reject(e); return; } } for (let i = 0; i < autoTagRules.length; i++) { try { rulesStore.put({ id: i, keyword: autoTagRules[i].keyword, tagId: autoTagRules[i].tagId }); } catch(e) { writeFailed = true; reject(e); return; } } tx.oncomplete = () => { if (!writeFailed) { updateTagOrderFromTags(); saveFilterWordsToDB().then(resolve).catch(reject); } }; tx.onerror = (e) => { writeFailed = true; reject(e.target.error); }; } } clearTags.onsuccess = checkCompleted; clearMagnets.onsuccess = checkCompleted; clearRules.onsuccess = checkCompleted; clearTags.onerror = (e) => { writeFailed = true; reject(e.target.error); }; clearMagnets.onerror = (e) => { writeFailed = true; reject(e.target.error); }; clearRules.onerror = (e) => { writeFailed = true; reject(e.target.error); }; }); }
     function loadFromDB() { return new Promise((resolve, reject) => { if (!db) { reject(new Error('Database not initialized')); return; } const tx = db.transaction([STORES.tags, STORES.magnets, STORES.autoTagRules], 'readonly'); const tagsStore = tx.objectStore(STORES.tags); const magnetsStore = tx.objectStore(STORES.magnets); const rulesStore = tx.objectStore(STORES.autoTagRules); const tagsReq = tagsStore.getAll(); const magnetsReq = magnetsStore.getAll(); const rulesReq = rulesStore.getAll(); let result = { tags: [], magnets: [], rules: [] }; let pending = 3; function done() { if (--pending === 0) resolve(result); } tagsReq.onsuccess = () => { result.tags = tagsReq.result; done(); }; magnetsReq.onsuccess = () => { result.magnets = magnetsReq.result; done(); }; rulesReq.onsuccess = () => { result.rules = rulesReq.result; done(); }; tx.onerror = (e) => reject(e.target.error); }); }
     function saveFailListToDB() { if (!db) return Promise.reject(); return new Promise((resolve, reject) => { const tx = db.transaction([STORES.failList], 'readwrite'); const store = tx.objectStore(STORES.failList); const clearReq = store.clear(); clearReq.onsuccess = () => { let completed = 0; if (failList.length === 0) { resolve(); return; } for (const item of failList) { const req = store.put(item); req.onsuccess = () => { completed++; if (completed === failList.length) resolve(); }; req.onerror = (e) => reject(e.target.error); } }; clearReq.onerror = (e) => reject(e.target.error); }); }
     function loadFailListFromDB() { if (!db) return Promise.reject(); return new Promise((resolve, reject) => { const tx = db.transaction([STORES.failList], 'readonly'); const store = tx.objectStore(STORES.failList); const req = store.getAll(); req.onsuccess = () => { failList = req.result || []; resolve(); }; req.onerror = (e) => reject(e.target.error); }); }
@@ -2557,6 +2557,12 @@ function loginGDrive() {
             await saveToDB();
             await saveFilterWordsToDB();
             await saveFailListToDB();
+            // 验证数据已正确写入 IndexedDB，防止因页面刷新导致数据丢失
+            const verify = await loadFromDB();
+            if (magnets.length > 0 && verify.magnets.length === 0) {
+                console.warn('[GDrive] 首次写入验证失败，重试一次');
+                await saveToDB();
+            }
 
             // Step 3: Save restoreMeta (images excluded, updated per-batch later)
             const partialRestoreMeta = {
@@ -2590,7 +2596,8 @@ function loginGDrive() {
             if (pendingImages.length > 0) {
                 const totalSteps = pendingImages.length;
                 let restoredCount = 0;
-                const RESTORE_CONCURRENCY = 3;
+                const isMobile = window.innerWidth < 768;
+                const RESTORE_CONCURRENCY = isMobile ? 1 : 3;
                 for (let i = 0; i < pendingImages.length; i += RESTORE_CONCURRENCY) {
                     if (gdriveSyncCancelled) throw new DOMException('已取消', 'AbortError');
                     const batch = pendingImages.slice(i, i + RESTORE_CONCURRENCY);
@@ -2603,10 +2610,17 @@ function loginGDrive() {
                     meta.restoredImageIds = Array.from(new Set([...(meta.restoredImageIds || []), ...batchIds]));
                     saveGDriveRestoreMeta(meta);
                     updateProgress(restoredCount, totalSteps, 0, 0, `恢复图片 ${restoredCount}/${pendingImages.length}`);
+                    if (isMobile && restoredCount < totalSteps) {
+                        await new Promise(r => setTimeout(r, 50));
+                    }
                 }
             }
             document.getElementById('gdriveStatus').textContent = `✅ ${actionLabel}成功 (${new Date().toLocaleString()})`;
             showToast(`${actionLabel}成功，新增 ${pendingMagnets.length} 张卡片 / ${pendingImages.length} 张图片${deleteMsg}`);
+            setTimeout(() => {
+                const modal = document.getElementById('gdriveModal');
+                if (modal) modal.style.display = 'none';
+            }, 1500);
         } catch (e) {
             if (gdriveSyncCancelled || e?.name === 'AbortError') {
                 document.getElementById('gdriveStatus').textContent = '⏹ 已取消 Google Drive 恢复';
