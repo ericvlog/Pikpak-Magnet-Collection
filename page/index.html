@@ -3927,7 +3927,19 @@ document.getElementById('pagePikpakLoginBtn').onclick = () => { ppUpdateLoginUI(
                 });
             }
             await openDB();
-            const loaded = await loadFromDB();
+            let loaded;
+            try {
+                loaded = await loadFromDB();
+            } catch (e) {
+                console.warn('首次读取DB失败，尝试重建:', e);
+                await new Promise((resolve, reject) => {
+                    const req = indexedDB.deleteDatabase('MagnetDatabase');
+                    req.onsuccess = () => resolve();
+                    req.onerror = () => reject();
+                });
+                await openDB();
+                loaded = { tags: [], magnets: [], rules: [] };
+            }
             if (loaded.tags.length) tags = loaded.tags;
             if (loaded.magnets.length) magnets = loaded.magnets;
             if (loaded.rules.length) autoTagRules = loaded.rules.map(r => ({ keyword: r.keyword, tagId: r.tagId }));
@@ -4025,7 +4037,12 @@ document.getElementById('pagePikpakLoginBtn').onclick = () => { ppUpdateLoginUI(
             console.log('初始化完成，所有按钮功能正常。');
         } catch(err){
             console.error(err);
-            alert('初始化失败，请刷新页面重试。错误：'+err.message);
+            const main = document.querySelector('.main-content');
+            if (main) {
+                main.innerHTML = `<div style="padding:2rem;text-align:center;"><h2>⚠️ 初始化失败</h2><p style="color:#ef4444;margin:1rem 0;">${err.message}</p><p style="color:var(--text-secondary);font-size:0.85rem;">这可能是 IndexedDB 数据损坏导致。尝试以下步骤：</p><ol style="text-align:left;max-width:400px;margin:1rem auto;color:var(--text-secondary);font-size:0.85rem;"><li>打开浏览器开发者工具 (F12)</li><li>Application → IndexedDB → 删除 MagnetDatabase</li><li>刷新页面</li></ol><button onclick="localStorage.clear();location.reload()" class="btn btn-danger" style="margin-top:1rem;">🗑️ 重置所有数据并刷新</button></div>`;
+            } else {
+                alert('初始化失败: ' + err.message);
+            }
         }
     })();
 })();
