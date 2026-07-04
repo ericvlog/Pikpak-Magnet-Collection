@@ -1006,18 +1006,16 @@
     const PP_TOKEN = 'https://user.mypikpak.com/v1/auth/token';
 
     const PUBLIC_CORS_PROXY = 'https://api.allorigins.win/raw?url=';
-    const PP_CORS_PROXY = (() => {
-  try {
-    const saved = localStorage.getItem('pp_cors_proxy');
-    return saved || '';
-  } catch(e) { return ''; }
-})();
+    function getPPCorsProxy() {
+  try { return localStorage.getItem('pp_cors_proxy') || ''; } catch(e) { return ''; }
+}
 
     async function ppFetchPikPak(url, options) {
-        if (!PP_CORS_PROXY) {
+        const corsProxy = getPPCorsProxy();
+        if (!corsProxy) {
             throw new Error('请先填写 CORS 代理地址（点击「PikPak 登录」→ 在底部输入框填入你的代理地址）');
         }
-        const proxyUrl = PP_CORS_PROXY + encodeURIComponent(url);
+        const proxyUrl = corsProxy + encodeURIComponent(url);
         const proxyOpts = { ...options, mode: 'cors' };
         if (proxyOpts.headers) {
             delete proxyOpts.headers.Origin;
@@ -2928,7 +2926,7 @@ function loginGDrive() {
                     .then(resolve)
                     .catch(err => {
                         if (err.message === '429') return reject(err);
-                        const px = PP_CORS_PROXY || PUBLIC_CORS_PROXY;
+                        const px = getPPCorsProxy() || PUBLIC_CORS_PROXY;
                         const proxyUrl = px + encodeURIComponent(`https://whatslink.info/api/v1/link?url=${encodeURIComponent(magnet)}`);
                         fetch(proxyUrl).then(r => r.json()).then(resolve).catch(reject);
                     });
