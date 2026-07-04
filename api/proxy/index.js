@@ -51,27 +51,27 @@ export default async function handler(req, res) {
   });
   const rawBody = Buffer.concat(chunks);
 
-  // Build outgoing headers �?forward browser's headers except proxy ones
+  // Build outgoing headers — strip ALL headers that could leak Vercel domain
   const outHeaders = {};
-  const skip = new Set([
-    'host', 'origin', 'referer', 'x-forwarded-for', 'x-forwarded-proto',
-    'x-vercel-deployment-url', 'x-vercel-id', 'x-vercel-proxy-signature',
-    'x-vercel-skip', 'connection', 'upgrade', 'content-length',
+  const skipPrefixes = ['x-vercel-', 'x-forwarded-', 'x-real-'];
+  const skipExact = new Set([
+    'host', 'origin', 'referer', 'connection', 'upgrade', 'content-length',
+    'trace-id', 'via', 'x-request-id',
   ]);
   for (const [k, v] of Object.entries(req.headers)) {
-    if (!skip.has(k.toLowerCase())) outHeaders[k] = v;
+    const lk = k.toLowerCase();
+    let matched = skipExact.has(lk);
+    if (!matched) matched = skipPrefixes.some(p => lk.startsWith(p));
+    if (!matched) outHeaders[k] = v;
   }
 
-  // 关键修复：设置正确的 Host 头（本地代理也是这样做的�?
+  // 设置正确的 Host 头
   const targetUrlObj = new URL(targetUrl);
   outHeaders['host'] = targetUrlObj.host;
 
-  // 删除 Origin �?Referer（对齐本地代理行为）
+  // 确认删掉 Origin 和 Referer
   delete outHeaders['origin'];
   delete outHeaders['referer'];
-
-  // �?PikPak 看到真实�?X-Forwarded-For（Vercel 环境�?remoteAddress�?
-  outHeaders['x-forwarded-for'] = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
   // 关键修复：设�?User-Agent（如果浏览器没发，就用默认的�?
   if (!outHeaders['user-agent']) {
