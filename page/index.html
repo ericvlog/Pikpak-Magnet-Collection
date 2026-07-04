@@ -1236,7 +1236,14 @@
             return await ppFetchFolderChildrenViaBridge(parentId);
         } catch (e) {
             console.log('[文件夹] 桥接失败，回退 CORS 代理:', e.message);
-            return await ppFetchFolderChildrenFallback(parentId);
+            try {
+                return await ppFetchFolderChildrenFallback(parentId);
+            } catch (fallbackErr) {
+                if (fallbackErr.message.includes('401') || fallbackErr.message.includes('未登录')) {
+                    throw new Error('PikPak 未登录或 Token 已过期，请点击「PikPak 登录」重新登录后重试');
+                }
+                throw fallbackErr;
+            }
         }
     }
 
