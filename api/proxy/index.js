@@ -97,10 +97,10 @@ export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Headers', '*');
     res.setHeader('Access-Control-Max-Age', '86400');
 
-    // Forward response headers (except hop-by-hop)
-    const hopByHop = new Set(['transfer-encoding', 'connection', 'keep-alive', 'te', 'trailers', 'upgrade']);
+    // Forward response headers (except hop-by-hop + content-encoding)
+    const skipHeaders = new Set(['transfer-encoding', 'connection', 'keep-alive', 'te', 'trailers', 'upgrade', 'content-encoding', 'content-length']);
     for (const [k, v] of resp.headers) {
-      if (!hopByHop.has(k.toLowerCase())) {
+      if (!skipHeaders.has(k.toLowerCase())) {
         res.setHeader(k, v);
       }
     }
