@@ -133,18 +133,23 @@ node proxy/server.js
 
 > ⚠️ 浏览器禁止 HTTPS 页面请求 HTTP 地址。GitHub Pages 是 HTTPS，本地代理是 HTTP，直接配置无效。
 
-**方法一：用 ngrok 创建 HTTPS 隧道（推荐）**
+**方法一（推荐）：Cloudflare Tunnel（免注册，无需下载）**
 
-1. 下载 [ngrok](https://ngrok.com/download)，解压出 `ngrok.exe` 放到 `proxy/` 目录
-2. 双击 `proxy/start-server.bat` → 终端询问是否启动 ngrok → 按 `Y`
-3. 浏览器打开 `http://127.0.0.1:4040` 查看 ngrok 的 HTTPS 转发地址（例如 `https://abc123.ngrok.io`）
-4. 打开 GitHub Pages 页面 → PikPak 登录弹窗 → CORS 代理输入框填入：
-   ```
-   https://你的ngrok地址.ngrok.io/?url=
-   ```
-5. 保存 → 测试连通 → 登录 PikPak
+双击 `proxy/start-server.bat`，脚本会自动启动本地服务器 + Cloudflare Tunnel，终端会输出类似：
 
-> ⚠️ 免费版 ngrok 每次启动地址都不同，需重新查看 `http://127.0.0.1:4040` 获取新地址。
+```
+Cloudflare Tunnel URL: https://xxxx.trycloudflare.com
+```
+
+将此地址填入页面弹窗的 CORS 代理输入框（末尾加 `/?url=`）：
+
+```
+https://xxxx.trycloudflare.com/?url=
+```
+
+保存 → 测试连通 → 登录 PikPak。
+
+> 隧道地址每次启动都会变化，脚本启动时会自动打印在终端。`cloudflared.exe` 会在首次运行时自动下载。
 
 **方法二：Chrome 允许不安全源（仅本机用）**
 
@@ -157,7 +162,7 @@ node proxy/server.js
 
 浏览器打开 `http://localhost:3000` 即是完整页面，同源访问无需任何代理配置。数据存在本机 IndexedDB，与 GitHub Pages 隔离。
 
-> 💡 建议日常使用 `http://localhost:3000`，只在需要从 GitHub Pages 调 PikPak API 时才用 ngrok。
+> 💡 建议日常使用 `http://localhost:3000`，只在需要从 GitHub Pages 调 PikPak API 时才用 Cloudflare Tunnel。
 
 ### Cloudflare Worker
 
@@ -302,7 +307,9 @@ node proxy/server.js
 ├── proxy/
 │   ├── server.js           ← 本地 Node.js 代理服务器
 │   ├── worker.js           ← Cloudflare Worker 代理
-│   └── start-server.bat    ← Windows 一键启动脚本
+│   ├── start-server.bat    ← Windows 一键启动脚本（含 Cloudflare Tunnel）
+│   └── cloudflared.exe     ← Cloudflare Tunnel 客户端（首次自动下载）
+├── .gitignore              ← 排除 *.exe、node_modules/
 ├── package.json            ← Vercel Node.js 项目配置
 └── README.md
 ```
