@@ -678,7 +678,7 @@
             opacity: 0.5;
             transition: transform 0.2s;
         }
-        .card-preview-folder-arrow.open {
+        .card-preview-folder-arrow.open, #offlineFolderArrow.open {
             transform: rotate(180deg);
         }
         .card-preview-folder-dropdown {
@@ -876,7 +876,7 @@
     </div>
 </div>
 <button id="floatHideImageBtn" class="float-hide-btn" title="隐藏/显示图片"><i class="fas fa-image"></i><i class="fas fa-eye-slash"></i><span>隐藏<br>图片</span></button>
-<div class="floating-controls"><div id="floatingBatchBar" class="batch-bar"><span id="selectedCount">已选择 0 个卡片</span><div class="batch-actions"><button id="batchAddTagsBtn" class="btn btn-primary">🏷️ 批量添加标签</button><button id="batchCopyLinksBtn" class="btn btn-success">🔗 批量复制链接</button><button id="batchSaveImagesBtn" class="btn btn-primary" style="background:#0f3b3f;">💾 批量存本地</button><button id="batchDeleteBtn" class="btn btn-danger">🗑️ 批量删除</button><button id="selectAllCurrentBtn" class="btn btn-outline">✔️ 全选当前视图</button><button id="selectAllFilteredBtn" class="btn btn-outline">⭐ 全选全部筛选结果</button><button id="cancelSelectionBtn" class="btn btn-outline">❌ 取消选择</button></div></div></div>
+<div class="floating-controls"><div id="floatingBatchBar" class="batch-bar"><span id="selectedCount">已选择 0 个卡片</span><div class="batch-actions"><button id="batchAddTagsBtn" class="btn btn-primary">🏷️ 批量添加标签</button><button id="batchCopyLinksBtn" class="btn btn-success">🔗 批量复制链接</button><button id="batchSaveImagesBtn" class="btn btn-primary" style="background:#0f3b3f;">💾 批量存本地</button><button id="batchDeleteBtn" class="btn btn-danger">🗑️ 批量删除</button><button id="selectAllCurrentBtn" class="btn btn-outline">✔️ 全选当前视图</button><button id="selectAllFilteredBtn" class="btn btn-outline">⭐ 全选全部筛选结果</button><button id="batchOfflineBtn" class="btn btn-primary" style="background:#0f3b3f;">📥 批量离线</button><button id="cancelSelectionBtn" class="btn btn-outline">❌ 取消选择</button></div></div></div>
 
 <!-- ===== 所有模态框 ===== -->
 <div id="batchCopyModal" class="modal"><div class="modal-card"><div class="flex-between"><h3>📋 批量磁力链接</h3><button id="closeBatchCopyModalBtn" class="icon-btn">✖</button></div><div style="padding:1rem;"><div id="batchLinksContainer" class="batch-links-container"></div><div style="display:flex;justify-content:flex-end;gap:12px;margin-top:1rem;"><button id="copyAllBatchLinksBtn" class="btn btn-primary">📋 复制全部</button><button id="cancelBatchCopyBtn" class="btn btn-outline">关闭</button></div></div></div></div>
@@ -892,6 +892,8 @@
 <div id="batchAddModal" class="modal"><div class="modal-card" style="max-width:850px;"><div class="flex-between"><h3>📥 批量添加磁力</h3><button id="closeBatchAddModalBtn" class="icon-btn">✖</button></div><div style="padding:1rem;"><div style="margin-bottom: 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px;"><span style="font-size:0.9rem; color:var(--text-secondary);">📋 粘贴多个磁力链接（每行一个）</span></div><div style="display:flex;gap:8px;align-items:stretch;flex-wrap:wrap;"><textarea id="batchMagnetInput" placeholder="每行一个磁力链接" style="flex:1;min-height:100px;padding:8px;border-radius:12px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--text-primary);font-family:monospace;"></textarea><div style="display:flex;flex-direction:column;gap:6px;justify-content:center;"><button id="parseBatchBtn" class="btn btn-primary">🔍 解析</button><button id="clearBatchInputBtn" class="btn btn-outline">清空</button></div></div><div id="batchParseResult" style="margin-top:12px;max-height:55vh;overflow-y:auto;border:1px solid var(--border-color);border-radius:12px;padding:8px;display:none;"><div id="batchItemList"></div><div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-top:12px;padding-top:12px;border-top:1px solid var(--border-color);"><button id="batchOfflineAllBtn" class="btn btn-primary">📥 全部离线</button><button id="batchSaveAllBtn" class="btn btn-success">💾 全部保存</button><button id="batchBothAllBtn" class="btn btn-primary" style="background:#0f3b3f;">⚡ 全部离线并保存</button><button id="batchDeleteAllBtn" class="btn btn-danger">🗑️ 全部删除</button><button id="batchClearSuccessBtn" class="btn btn-outline">🧹 清除已操作</button></div></div></div></div></div>
 <div id="clientIdModal" class="modal"><div class="modal-card" style="max-width:460px;"><div class="flex-between"><h3>🔑 Google OAuth 设置</h3><button id="closeClientIdModalBtn" class="icon-btn">✖</button></div><div style="padding:1.5rem;display:flex;flex-direction:column;gap:14px;"><div style="font-size:0.9rem;line-height:1.5;color:var(--text-secondary);">请先到 Google Cloud Console 创建 OAuth 2.0 Client ID：<br><a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color:#4285f4;font-weight:600;">https://console.cloud.google.com/apis/credentials ➚</a></div><input type="text" id="clientIdInput" placeholder="粘贴您的 Client ID" style="width:100%;padding:10px 14px;border-radius:12px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--text-primary);font-family:monospace;font-size:0.85rem;"><div style="display:flex;gap:10px;justify-content:flex-end;"><button id="confirmClientIdBtn" class="btn btn-primary">确认</button><button id="cancelClientIdBtn" class="btn btn-outline">取消</button></div></div></div></div>
 <div id="gdriveModal" class="modal"><div class="modal-card" style="max-width:420px;"><div class="flex-between"><h3>☁️ Google Drive 云端</h3><button id="closeGdriveModalBtn" class="icon-btn">✖</button></div><div style="padding:1.5rem;display:flex;flex-direction:column;gap:16px;"><div id="gdriveLoginSection" style="display:flex;align-items:center;justify-content:space-between;"><span id="gdriveUserStatus" style="font-weight:600;">未登录</span><button id="gdriveLoginBtn" class="btn" style="background:#4285f4;color:white;">🔑 登录</button></div><div id="gdriveActionsSection" style="display:none;flex-direction:column;gap:12px;"><div style="display:flex;gap:10px;flex-wrap:wrap;"><button id="gdriveBackupBtn" class="btn btn-success" style="flex:1;">☁️ 备份到云端</button><button id="gdriveRestoreBtn" class="btn btn-primary" style="flex:1;">☁️ 从云端恢复</button></div><button id="gdriveCleanupBtn" class="btn btn-outline">🧹 清理云端孤儿图片</button><div id="gdriveStatus" style="font-size:0.85rem;padding:8px 12px;background:var(--tag-bg);border-radius:12px;"></div><div id="gdriveQuotaStatus" style="font-size:0.85rem;color:#64748b;text-align:center;"></div></div></div></div></div>
+<!-- ===== 批量离线文件夹选择 ===== -->
+<div id="offlineFolderModal" class="modal"><div class="modal-card" style="max-width:460px;"><div class="flex-between"><h3>📁 选择 PikPak 文件夹</h3><button id="closeOfflineFolderModalBtn" class="icon-btn">✖</button></div><div style="padding:1rem;"><div id="offlineFolderSelector" style="cursor:pointer;display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--border-color);border-radius:12px;margin-bottom:12px;"><span id="offlineFolderName">📁 默认文件夹</span><span id="offlineFolderArrow" style="margin-left:auto;transition:transform .2s;">▼</span></div><div id="offlineFolderDropdown" style="display:none;border:1px solid var(--border-color);border-radius:12px;padding:8px;max-height:300px;overflow-y:auto;margin-bottom:12px;"></div><div style="display:flex;gap:8px;justify-content:flex-end;"><button id="startOfflineBtn" class="btn btn-primary">📥 开始离线</button><button id="cancelOfflineBtn" class="btn btn-outline">取消</button></div></div></div></div>
 
 <!-- ===== PikPak 登录模态框（无扩展时使用） ===== -->
 <div id="pikpakModal" class="modal"><div class="modal-card" style="max-width:420px;"><div class="flex-between"><h3>🔑 PikPak 登录（页面直连）</h3><button id="closePikpakModalBtn" class="icon-btn">✖</button></div><div style="padding:1.5rem;display:flex;flex-direction:column;gap:14px;"><div style="font-size:0.85rem;line-height:1.5;color:var(--text-secondary);">登录后可在无扩展环境下（如手机浏览器）直接离线下载到 PikPak。密码仅存储在你本地浏览器中。</div><input type="text" id="pagePikpakUser" placeholder="邮箱 / 手机号 / 用户名" style="width:100%;padding:10px 14px;border-radius:12px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--text-primary);"><input type="password" id="pagePikpakPass" placeholder="密码" style="width:100%;padding:10px 14px;border-radius:12px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--text-primary);"><div id="pagePikpakStatus" style="font-size:0.85rem;padding:8px 12px;background:var(--tag-bg);border-radius:12px;text-align:center;">未登录</div><div style="display:flex;align-items:center;gap:6px;font-size:0.77rem;"><input type="text" id="ppProxyInput" value="" placeholder="CORS 代理地址，见 github.com/ericvlog/Pikpak-Magnet-Collection（推荐安装扩展，无需配置）" style="flex:1;padding:6px 10px;border-radius:8px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--text-primary);font-size:inherit;"><button id="ppSaveProxyBtn" style="padding:4px 10px;border-radius:8px;border:1px solid var(--input-border);background:var(--btn-bg);color:var(--text-primary);cursor:pointer;font-size:inherit;">保存</button><span id="ppProxyPingResult" style="font-size:0.8rem;margin-left:auto;"></span></div><div style="font-size:0.75rem;color:var(--text-secondary);line-height:1.4;">💡 推荐使用浏览器扩展（无需配置代理）：<a href="https://github.com/ericvlog/Pikpak-Magnet-Collection" target="_blank" style="color:#306eff;">github.com/ericvlog/Pikpak-Magnet-Collection</a></div><div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;"><button id="pagePikpakLoginBtn2" class="btn btn-primary" style="flex:1;">登录</button><button id="pagePikpakRefreshBtn" class="btn btn-outline" style="display:none;flex:1;">🔄 刷新 Token</button><button id="pagePikpakLogoutBtn" class="btn btn-danger" style="display:none;flex:1;">退出登录</button></div></div></div></div>
@@ -1749,7 +1751,7 @@ function showCardPreview(magnetLink, title, onUpdateBatchItem = null) {
 
     // ===== 多选 & 界面控制 =====
     function toggleSelectionMode(){ selectionMode=!selectionMode; const container=document.getElementById('magnetGridContainer'); const bar=document.getElementById('floatingBatchBar'); if(selectionMode){ container.classList.add('selection-mode'); if(selectedCardIds.size>0) bar.style.display='flex'; else bar.style.display='none'; lastSelectedCardId=null; }else{ container.classList.remove('selection-mode'); bar.style.display='none'; selectedCardIds.clear(); } renderLoadedCards(); }
-    function updateSelectedCount(){ const span=document.getElementById('selectedCount'); if(span) span.innerText=`已选择 ${selectedCardIds.size} 个卡片`; const btns=document.querySelectorAll('#batchAddTagsBtn, #batchCopyLinksBtn, #batchDeleteBtn, #batchSaveImagesBtn'); btns.forEach(btn=>btn.disabled=(selectedCardIds.size===0)); const bar=document.getElementById('floatingBatchBar'); if(selectionMode){ if(selectedCardIds.size>0) bar.style.display='flex'; else bar.style.display='none'; } }
+    function updateSelectedCount(){ const span=document.getElementById('selectedCount'); if(span) span.innerText=`已选择 ${selectedCardIds.size} 个卡片`; const btns=document.querySelectorAll('#batchAddTagsBtn, #batchCopyLinksBtn, #batchDeleteBtn, #batchSaveImagesBtn, #batchOfflineBtn'); btns.forEach(btn=>btn.disabled=(selectedCardIds.size===0)); const bar=document.getElementById('floatingBatchBar'); if(selectionMode){ if(selectedCardIds.size>0) bar.style.display='flex'; else bar.style.display='none'; } }
     function selectAllCurrent(){ const ids=allFilteredMagnets.slice(0,currentLoadedCount).map(m=>m.id); ids.forEach(id=>selectedCardIds.add(id)); renderLoadedCards(); updateSelectedCount(); showToast(`已选择当前视图中的 ${ids.length} 张卡片`); }
     function selectAllFiltered(){ allFilteredMagnets.forEach(m=>selectedCardIds.add(m.id)); renderLoadedCards(); updateSelectedCount(); showToast(`已选择所有筛选结果中的 ${allFilteredMagnets.length} 张卡片`); }
     async function batchDelete(){ if(selectedCardIds.size===0){ alert('请先选择卡片'); return; } if(confirm(`确定要永久删除选中的 ${selectedCardIds.size} 张卡片吗？`)){ const toDel=Array.from(selectedCardIds); magnets=magnets.filter(m=>!selectedCardIds.has(m.id)); selectedCardIds.clear(); await saveToDB(); updateFilteredList(); currentLoadedCount=0; renderLoadedCards(); updateStats(allFilteredMagnets.length,magnets.length); showToast(`已删除 ${toDel.length} 张卡片`); updateSelectedCount(); if(selectionMode) toggleSelectionMode(); } }
@@ -3552,6 +3554,102 @@ async function renderLoadedCards() {
         updateStats(allFilteredMagnets.length, magnets.length);
     }
 
+    // ===== 批量离线到 PikPak =====
+    let _offlineFolderPath = [];
+    let _offlineSelectedParentId = '';
+    let _offlineSelectedFolderName = '📁 默认文件夹';
+
+    function _offlineResetFolderState() {
+        _offlineFolderPath = [];
+        _offlineSelectedParentId = '';
+        _offlineSelectedFolderName = '📁 默认文件夹';
+    }
+
+    async function _offlineLoadAndRenderLevel() {
+        const dropdown = document.getElementById('offlineFolderDropdown');
+        if (!dropdown) return;
+        dropdown.innerHTML = '<div style="padding:8px;color:#64748b;">加载中...</div>';
+        try {
+            const parentId = _offlineFolderPath.length > 0 ? _offlineFolderPath[_offlineFolderPath.length - 1].id : '';
+            const folders = await ppLoadFolderChildren(parentId);
+            _offlineRenderFolderList(folders);
+        } catch (err) {
+            dropdown.innerHTML = '<div style="padding:8px;color:#ef4444;">加载失败: ' + escapeHtml(err.message) + '</div>';
+        }
+    }
+
+    function _offlineRenderFolderList(folders) {
+        const dropdown = document.getElementById('offlineFolderDropdown');
+        if (!dropdown) return;
+        let html = '';
+        if (_offlineFolderPath.length > 0) {
+            html += '<div class="card-preview-folder-option back" data-action="back" style="padding:6px 8px;cursor:pointer;border-radius:8px;">← 返回上级</div>';
+        }
+        for (const f of folders) {
+            const active = f.id === _offlineSelectedParentId ? ' style="padding:6px 8px;cursor:pointer;border-radius:8px;background:var(--tag-bg);"' : ' style="padding:6px 8px;cursor:pointer;border-radius:8px;"';
+            html += `<div class="offline-folder-item" data-id="${f.id}"${active}>📁 ${escapeHtml(f.name)}</div>`;
+        }
+        html += '<div class="offline-folder-create" style="padding:6px 8px;cursor:pointer;border-radius:8px;color:var(--text-secondary);">➕ 新建文件夹</div>';
+        dropdown.innerHTML = html;
+
+        dropdown.querySelector('[data-action="back"]')?.addEventListener('click', () => {
+            _offlineFolderPath.pop();
+            _offlineSelectedParentId = _offlineFolderPath.length > 0 ? _offlineFolderPath[_offlineFolderPath.length - 1].id : '';
+            _offlineRenderSelectedName();
+            _offlineLoadAndRenderLevel();
+        });
+
+        dropdown.querySelectorAll('.offline-folder-item').forEach(el => {
+            el.addEventListener('click', () => {
+                const id = el.dataset.id;
+                const name = el.textContent.replace('📁', '').trim();
+                _offlineFolderPath.push({ id, name });
+                _offlineSelectedParentId = id;
+                _offlineRenderSelectedName();
+                _offlineLoadAndRenderLevel();
+            });
+        });
+
+        dropdown.querySelector('.offline-folder-create')?.addEventListener('click', async () => {
+            const name = prompt('请输入新文件夹名称：');
+            if (!name || !name.trim()) return;
+            try {
+                const parentId = _offlineFolderPath.length > 0 ? _offlineFolderPath[_offlineFolderPath.length - 1].id : '';
+                const result = await ppCreateFolder(name.trim(), parentId);
+                _offlineSelectedParentId = result.id;
+                _offlineFolderPath.push({ id: result.id, name: name.trim() });
+                _offlineRenderSelectedName();
+                await _offlineLoadAndRenderLevel();
+            } catch (err) {
+                alert('创建文件夹失败: ' + err.message);
+            }
+        });
+    }
+
+    function _offlineRenderSelectedName() {
+        const nameEl = document.getElementById('offlineFolderName');
+        if (!nameEl) return;
+        if (_offlineFolderPath.length > 0) {
+            _offlineSelectedFolderName = '📂 ' + _offlineFolderPath.map(p => p.name).join(' / ');
+        } else {
+            _offlineSelectedFolderName = '📁 默认文件夹';
+        }
+        nameEl.textContent = _offlineSelectedFolderName;
+    }
+
+    async function batchOfflineToPikPak() {
+        if (selectedCardIds.size === 0) { showToast('请先选择卡片', true); return; }
+        _offlineResetFolderState();
+        const nameEl = document.getElementById('offlineFolderName');
+        const arrowEl = document.getElementById('offlineFolderArrow');
+        const dropdown = document.getElementById('offlineFolderDropdown');
+        if (nameEl) nameEl.textContent = '📁 默认文件夹';
+        if (dropdown) dropdown.style.display = 'none';
+        if (arrowEl) arrowEl.classList.remove('open');
+        dropdown.dataset.loaded = '';
+        document.getElementById('offlineFolderModal').style.display = 'flex';
+    }
+
     // ===== 主事件绑定（所有按钮） =====
     function bindButtons() {
         document.getElementById('menuAddMagnet').onclick = openBatchAddModal;
@@ -3614,6 +3712,60 @@ async function renderLoadedCards() {
         document.getElementById('batchCopyLinksBtn').onclick = batchCopyLinksWithModal;
         document.getElementById('batchSaveImagesBtn').onclick = batchSaveSelectedImages;
         document.getElementById('batchDeleteBtn').onclick = batchDelete;
+        document.getElementById('batchOfflineBtn').onclick = batchOfflineToPikPak;
+
+        // 批量离线文件夹选择
+        document.getElementById('offlineFolderSelector').addEventListener('click', async () => {
+            const dropdown = document.getElementById('offlineFolderDropdown');
+            const arrowEl = document.getElementById('offlineFolderArrow');
+            const isOpen = dropdown.style.display === 'block';
+            if (isOpen) {
+                dropdown.style.display = 'none';
+                if (arrowEl) arrowEl.classList.remove('open');
+            } else {
+                dropdown.style.display = 'block';
+                if (arrowEl) arrowEl.classList.add('open');
+                if (!dropdown.dataset.loaded) {
+                    await _offlineLoadAndRenderLevel();
+                    dropdown.dataset.loaded = 'true';
+                }
+            }
+        });
+        document.getElementById('closeOfflineFolderModalBtn').addEventListener('click', () => {
+            document.getElementById('offlineFolderModal').style.display = 'none';
+        });
+        document.getElementById('cancelOfflineBtn').addEventListener('click', () => {
+            document.getElementById('offlineFolderModal').style.display = 'none';
+        });
+        document.getElementById('offlineFolderModal').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) document.getElementById('offlineFolderModal').style.display = 'none';
+        });
+        document.getElementById('startOfflineBtn').addEventListener('click', async () => {
+            const modal = document.getElementById('offlineFolderModal');
+            const dropdown = document.getElementById('offlineFolderDropdown');
+            modal.style.display = 'none';
+            dropdown.dataset.loaded = '';
+            const ids = Array.from(selectedCardIds);
+            if (ids.length === 0) { showToast('请先选择卡片', true); return; }
+            const parentId = _offlineSelectedParentId;
+            let success = 0, failed = 0;
+            showProgressModal('📥 批量离线到 PikPak...');
+            for (let i = 0; i < ids.length; i++) {
+                const magnet = magnets.find(m => m.id === ids[i]);
+                if (!magnet) { failed++; continue; }
+                try {
+                    await sendToPikPakViaBridge(magnet.magnetLink, parentId);
+                    success++;
+                } catch (err) {
+                    failed++;
+                }
+                updateProgress(i + 1, ids.length, success, failed, '正在发送到 PikPak...');
+                await new Promise(r => setTimeout(r, 300));
+            }
+            hideProgressModal();
+            showToast(`📥 批量离线完成: ${success} 个成功, ${failed} 个失败`, failed > 0);
+        });
+
         document.getElementById('selectAllCurrentBtn').onclick = selectAllCurrent;
         document.getElementById('selectAllFilteredBtn').onclick = selectAllFiltered;
         document.getElementById('cancelSelectionBtn').onclick = cancelSelection;
