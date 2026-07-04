@@ -1371,7 +1371,7 @@ function bindMagnetLinkEvents() {
                 </div>
                 <div class="card-preview-body">
                     <div>
-                        <div class="card-preview-title">${escapeHtml(name)}</div>
+                        <div class="card-preview-title" contenteditable="plaintext-only">${escapeHtml(name)}</div>
                         <div class="card-preview-desc">检测到磁力链接，选择以下操作：</div>
                     </div>
                     ${validShots.length > 1 ? `
@@ -1566,7 +1566,8 @@ function bindMagnetLinkEvents() {
                     if (action === 'save' || action === 'both') {
                         if (existing) {
                             // 更新现有卡片
-                            existing.title = name;
+                            const editedTitle = (overlay.querySelector('.card-preview-title').textContent || '').trim() || name;
+                            existing.title = editedTitle;
                             existing.size = size || '';
                             const shouldUpdateImage = selectedImageUrl && selectedImageUrl !== existing.imageUrl;
                             if (shouldUpdateImage) {
@@ -1611,10 +1612,11 @@ function bindMagnetLinkEvents() {
                                     }
                                 } catch(e) { /* 保留原始URL */ }
                             }
+                            const editedTitle = (overlay.querySelector('.card-preview-title').textContent || '').trim() || name;
                             const newMagnet = {
                                 id: nextMagnetId++,
                                 magnetLink: magnetLink,
-                                title: name,
+                                title: editedTitle,
                                 imageUrl: finalImageUrl,
                                 size: size || '',
                                 tagIds: [],

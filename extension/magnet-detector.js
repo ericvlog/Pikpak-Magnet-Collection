@@ -785,7 +785,7 @@
                         </div>
                         <div class="pk-magnet-preview-body">
                             <div>
-                                <div class="pk-magnet-preview-title">${escapeHtml(name)}</div>
+                                <div class="pk-magnet-preview-title" contenteditable="plaintext-only">${escapeHtml(name)}</div>
                                 <div class="pk-magnet-preview-desc">检测到磁力链接，选择以下操作：</div>
                             </div>
                             ${validShots.length > 1 ? `
@@ -985,13 +985,15 @@
                                 showToast('✅ 已发送到 PikPak 离线下载');
                                 close();
                             } else if (action === 'save') {
-                                await saveMagnetToManager(magnetLink, name, size, selectedImageUrl);
+                                const editedName = (overlay.querySelector('.pk-magnet-preview-title').textContent || '').trim() || name;
+                                await saveMagnetToManager(magnetLink, editedName, size, selectedImageUrl);
                                 showToast('✅ 已保存到磁力管理器');
                                 close();
                             } else if (action === 'both') {
+                                const editedName = (overlay.querySelector('.pk-magnet-preview-title').textContent || '').trim() || name;
                                 await Promise.all([
                                     offlineToPikPak(magnetLink, selectedParentId),
-                                    saveMagnetToManager(magnetLink, name, size, selectedImageUrl)
+                                    saveMagnetToManager(magnetLink, editedName, size, selectedImageUrl)
                                 ]);
                                 showToast('✅ 已离线并保存到管理器');
                                 close();
