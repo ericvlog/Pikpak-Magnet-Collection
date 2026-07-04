@@ -129,24 +129,35 @@ node proxy/server.js
 
 默认监听 `http://localhost:3000`，同时提供 API 代理和页面服务。
 
-#### 配合 GitHub Pages 使用
+#### 配合 GitHub Pages 使用（通过 HTTPS 隧道）
 
-本地代理可跨域给 `https://ericvlog.github.io/Pikpak-Magnet-Collection/` 使用：
+> ⚠️ 浏览器禁止 HTTPS 页面请求 HTTP 地址。GitHub Pages 是 HTTPS，本地代理是 HTTP，直接配置无效。
 
-1. 双击 `proxy/start-server.bat` 或运行 `node proxy/server.js`
-2. 打开 GitHub Pages 页面
-3. 点击 **PikPak 登录** → 在弹窗底部 CORS 代理输入框填入：
+**方法一：用 ngrok 创建 HTTPS 隧道（推荐）**
+
+1. 下载 [ngrok](https://ngrok.com/download)，解压出 `ngrok.exe` 放到 `proxy/` 目录
+2. 双击 `proxy/start-server.bat` → 终端询问是否启动 ngrok → 按 `Y`
+3. 浏览器打开 `http://127.0.0.1:4040` 查看 ngrok 的 HTTPS 转发地址（例如 `https://abc123.ngrok.io`）
+4. 打开 GitHub Pages 页面 → PikPak 登录弹窗 → CORS 代理输入框填入：
    ```
-   http://你电脑的局域网IP:3000/?url=
+   https://你的ngrok地址.ngrok.io/?url=
    ```
-   （IP 见启动时终端打印的提示，例如 `http://192.168.1.100:3000/?url=`）
-4. 保存 → 测试连通 → 登录 PikPak 即可
+5. 保存 → 测试连通 → 登录 PikPak
 
-> 手机访问 GitHub Pages 时，手机必须和电脑在同一 WiFi。
+> ⚠️ 免费版 ngrok 每次启动地址都不同，需重新查看 `http://127.0.0.1:4040` 获取新地址。
 
-#### 本地直接访问
+**方法二：Chrome 允许不安全源（仅本机用）**
 
-浏览器打开 `http://localhost:3000` 即是完整页面，此时同源无需任何代理配置。
+1. 打开 `chrome://flags/#unsafely-treat-insecure-origin-as-secure`
+2. 添加 `http://127.0.0.1:3000` 和 `http://10.151.76.88:3000`
+3. 重启浏览器
+4. 在 GitHub Pages 的 PikPak 弹窗填入 `http://127.0.0.1:3000/?url=`
+
+#### 本地直接访问（最简单）
+
+浏览器打开 `http://localhost:3000` 即是完整页面，同源访问无需任何代理配置。数据存在本机 IndexedDB，与 GitHub Pages 隔离。
+
+> 💡 建议日常使用 `http://localhost:3000`，只在需要从 GitHub Pages 调 PikPak API 时才用 ngrok。
 
 ### Cloudflare Worker
 
