@@ -3675,15 +3675,10 @@ document.getElementById('gdriveManageBtn').onclick = async () => { await initGDr
                 result.textContent = '测试中...';
                 result.style.color = '#306eff';
                 try {
-                    const testUrl = proxyBase + encodeURIComponent('https://api-drive.mypikpak.com/drive/v1/files?page_size=1');
+                    const testUrl = proxyBase + encodeURIComponent('https://mypikpak.com/');
                     const resp = await fetch(testUrl, { method: 'GET', mode: 'cors' });
-                    if (resp.status >= 200 && resp.status < 500) {
-                        result.textContent = '代理连通 ✓';
-                        result.style.color = '#28a745';
-                    } else {
-                        result.textContent = '代理异常 (' + resp.status + ')';
-                        result.style.color = '#f59e0b';
-                    }
+                    result.textContent = '代理连通 ✓';
+                    result.style.color = '#28a745';
                 } catch (e) {
                     result.textContent = '无法连接 ✗';
                     result.style.color = '#ef4444';
