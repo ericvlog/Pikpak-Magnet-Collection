@@ -71,7 +71,9 @@ const server = http.createServer((req, res) => {
       delete opts.headers['referer'];
 
       const proxyReq = https.request(opts, (proxyRes) => {
-        const h = { ...proxyRes.headers, ...CORS_HEADERS };
+        const h = { ...proxyRes.headers };
+        Object.keys(h).forEach(k => { if (k.toLowerCase().startsWith('access-control-')) delete h[k]; });
+        Object.assign(h, CORS_HEADERS);
         res.writeHead(proxyRes.statusCode, h);
         proxyRes.pipe(res);
       });
@@ -97,11 +99,11 @@ const server = http.createServer((req, res) => {
 
   fs.readFile(filePath, (err, data) => {
     if (err) {
-      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.writeHead(404, { ...CORS_HEADERS, 'Content-Type': 'text/plain' });
       return res.end('Not Found');
     }
     const ext = path.extname(filePath);
-    res.writeHead(200, { 'Content-Type': MIME_TYPES[ext] || 'application/octet-stream' });
+    res.writeHead(200, { ...CORS_HEADERS, 'Content-Type': MIME_TYPES[ext] || 'application/octet-stream' });
     res.end(data);
   });
 });

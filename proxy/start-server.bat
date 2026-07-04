@@ -1,43 +1,63 @@
 @echo off
-title PikPak 本地服务器
-echo 正在启动 PikPak 服务器...
-echo.
-:: 启动本地服务器（后台运行，不阻塞）
-start "PikPak Server" /B node "%~dp0server.js" > nul 2>&1
-timeout /t 2 /nobreak > nul
-start "" http://localhost:3000
+setlocal enabledelayedexpansion
 
-:: 检查 ngrok 是否可用
-where ngrok > nul 2>&1
-if %ERRORLEVEL% EQU 0 (
-    echo 检测到 ngrok，是否启动 HTTPS 隧道？[Y/N]
-    echo （用于 GitHub Pages 等 HTTPS 页面调用本地代理）
-    choice /c YN /n /m ""
-    if errorlevel 2 goto :skip_ngrok
-    echo 启动 ngrok...
-    start "ngrok" ngrok http 3000 --log=stdout > nul 2>&1
-    timeout /t 3 /nobreak > nul
-    echo.
-    echo ==========================================
-    echo ngrok 启动完成！
-    echo 请访问 http://127.0.0.1:4040 查看 ngrok 的 HTTPS 地址
-    echo 在 GitHub Pages 的 PikPak 弹窗中填入：
-    echo   https://你的ngrok地址.ngrok.io/?url=
-    echo ==========================================
-    echo.
-    echo ⚠️ 免费版 ngrok 每次启动地址都不同，需要重新填入
-    goto :end_msg
+set "PROXY_DIR=%~dp0"
+set "PROXY_DIR=%PROXY_DIR:\=/%"
+if "%PROXY_DIR:~-1%"=="/" set "PROXY_DIR=%PROXY_DIR:~0,-1%"
+set "PROXY_DIR=%PROXY_DIR:/=\%"
+
+set "SERVER_JS=%PROXY_DIR%\server.js"
+set "TUNNEL_EXE=%PROXY_DIR%\cloudflared.exe"
+
+if not exist "%SERVER_JS%" (
+    echo [ERROR] server.js not found.
+    pause
+    exit /b 1
 )
-:skip_ngrok
+
+if not exist "%TUNNEL_EXE%" (
+    echo [..] Downloading cloudflared...
+    curl.exe -L -o "%TUNNEL_EXE%" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe"
+    if errorlevel 1 (
+        echo [FAIL] Download failed. Please manually download cloudflared to proxy\.
+        echo        https://github.com/cloudflare/cloudflared/releases
+        pause
+        exit /b 1
+    )
+    echo [OK] cloudflared downloaded.
+)
+
 echo.
-echo 提示: 下载 https://ngrok.com/download 放到本目录，
-echo       下次启动时可选择开启 HTTPS 隧道。
-:end_msg
-echo ==========================================
-echo   本机:   http://localhost:3000
-echo   手机:   http://10.151.76.88:3000（同一 WiFi）
-echo ==========================================
-echo 按任意键退出服务器...
-pause > nul
-taskkill /f /im node.exe > nul 2>&1
-taskkill /f /im ngrok.exe > nul 2>&1
+echo Start HTTPS tunnel (Cloudflare Tunnel)?
+echo   Y - Yes (forwards to http://localhost:3000)
+echo   N - No, skip tunnel
+choice /c YN /n /m "Your choice (Y/N, default N): "
+if errorlevel 2 goto :start_server
+
+echo.
+echo Starting cloudflared tunnel (minimized window)...
+set "CF_LOG=%TEMP%\cf_tunnel_%RANDOM%.txt"
+start /MIN "" "%TUNNEL_EXE%" tunnel --url http://localhost:3000 --logfile "%CF_LOG%"
+echo Waiting for tunnel to connect (15s)...
+ping -n 16 127.0.0.1 >nul
+
+echo.
+echo ========================================
+findstr "trycloudflare.com" "%CF_LOG%" 2>nul
+echo ========================================
+echo.
+echo Copy the URL above, then server starts automatically...
+timeout /t 3 /nobreak >nul
+
+:start_server
+echo.
+echo Starting local server...
+echo   http://localhost:3000
+echo   Press Ctrl+C to stop
+echo.
+node "%SERVER_JS%"
+if errorlevel 1 (
+    echo [FAIL] Node.js failed to start.
+    pause
+)
+goto :eof
