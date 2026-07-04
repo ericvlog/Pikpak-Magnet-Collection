@@ -2799,7 +2799,7 @@ function loginGDrive() {
                     e.stopPropagation();
                     const magnet = btn.getAttribute('data-magnet');
                     const title = btn.getAttribute('data-title') || '未知资源';
-                    showCardPreview(magnet, title);
+                    showCardPreview(magnet, title, () => loadFailedPreviewList());
                 };
             });
 
