@@ -98,7 +98,7 @@
 
 ### 一键部署到 Vercel
 
-[![Deploy to Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/ericvlog/pikpak-cors)
+[![Deploy to Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/ericvlog/Pikpak-Magnet-Collection)
 
 1. 点上方按钮
 2. 用 GitHub 登录 Vercel
