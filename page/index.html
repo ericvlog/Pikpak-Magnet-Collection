@@ -1366,7 +1366,7 @@ function bindMagnetLinkEvents() {
         overlay.innerHTML = `
             <div class="card-preview-card">
                 <div class="card-preview-hero">
-                    ${heroSrc ? `<img src="${heroSrc}" alt="" onerror="this.parentElement.innerHTML='<div style=\\'color:#888;font-size:14px;\\'>无预览图</div>'">` : '<div style="color:#888;font-size:14px;">无预览图</div>'}
+                    ${heroSrc ? `<img src="${heroSrc}" alt="" referrerpolicy="no-referrer" onerror="this.parentElement.innerHTML='<div style=\\'color:#888;font-size:14px;\\'>无预览图</div>'">` : '<div style="color:#888;font-size:14px;">无预览图</div>'}
                     <button class="card-preview-close">✖</button>
                 </div>
                 <div class="card-preview-body">
@@ -1378,7 +1378,7 @@ function bindMagnetLinkEvents() {
                     <div class="card-preview-shots">
                         ${validShots.slice(0, 5).map((src, idx) => `
                             <div class="card-preview-shot ${idx === 0 ? 'active' : ''}" data-src="${src}">
-                                <img src="${src}" alt="" onerror="this.closest('.card-preview-shot')?.remove();">
+                                <img src="${src}" alt="" referrerpolicy="no-referrer" onerror="this.closest('.card-preview-shot')?.remove();">
                             </div>
                         `).join('')}
                     </div>

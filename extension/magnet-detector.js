@@ -780,7 +780,7 @@
                 overlay.innerHTML = `
                     <div class="pk-magnet-preview-card">
                         <div class="pk-magnet-preview-hero">
-                            ${heroSrc ? `<img src="${heroSrc}" alt="" onerror="this.parentElement.innerHTML='<div style=\\'color:#888;font-size:14px;\\'>无预览图</div>'">` : '<div style="color:#888;font-size:14px;">无预览图</div>'}
+                            ${heroSrc ? `<img src="${heroSrc}" alt="" referrerpolicy="no-referrer" onerror="this.parentElement.innerHTML='<div style=\\'color:#888;font-size:14px;\\'>无预览图</div>'">` : '<div style="color:#888;font-size:14px;">无预览图</div>'}
                             <button class="pk-magnet-preview-close">✖</button>
                         </div>
                         <div class="pk-magnet-preview-body">
@@ -792,7 +792,7 @@
                             <div class="pk-magnet-preview-shots">
                                 ${validShots.slice(0, 5).map((src, idx) => `
                                     <div class="pk-magnet-preview-shot ${idx === 0 ? 'active' : ''}" data-src="${src}">
-                                        <img src="${src}" alt="" onerror="this.closest('.pk-magnet-preview-shot')?.remove();">
+                                        <img src="${src}" alt="" referrerpolicy="no-referrer" onerror="this.closest('.pk-magnet-preview-shot')?.remove();">
                                     </div>
                                 `).join('')}
                             </div>

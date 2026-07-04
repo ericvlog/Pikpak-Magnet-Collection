@@ -11,7 +11,7 @@ const os = require('os');
 
 const PORT = 3000;
 const WEB_ROOT = path.join(__dirname, '..'); // 项目根目录
-const ALLOWED_HOSTS = ['user.mypikpak.com', 'api-drive.mypikpak.com', 'api.mypikpak.com', 'mypikpak.com'];
+const ALLOWED_HOSTS = ['user.mypikpak.com', 'api-drive.mypikpak.com', 'api.mypikpak.com', 'mypikpak.com', 'whatslink.info'];
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS, PATCH',
