@@ -18,6 +18,8 @@
 
 ### 方案 B：本地运行（免代理、免扩展）
 
+Windows 双击 `proxy/start-server.bat`，或命令行：
+
 ```bash
 node proxy/server.js
 # 浏览器打开 http://localhost:3000
