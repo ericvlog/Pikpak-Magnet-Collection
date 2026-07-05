@@ -294,10 +294,15 @@ window.addEventListener('message', (event) => {
 
     // --- 代理地址同步 ---
     if (event.data.type === 'PP_PROXY_UPDATED') {
-        const proxy = event.data.proxy;
-        if (proxy) {
-            chrome.storage.local.set({ pp_cors_proxy: proxy });
-            console.log('[Content] 已保存代理地址到扩展存储:', proxy.substring(0, 40) + '...');
-        }
+        const proxy = event.data.proxy || '';
+        chrome.storage.local.set({ pp_cors_proxy: proxy });
+        console.log('[Content] 已同步代理地址到扩展存储:', proxy.substring(0, 40) || '(空)');
+    }
+
+    // --- 通信模式同步 ---
+    if (event.data.type === 'PP_MODE_UPDATED') {
+        const mode = event.data.mode || 'extension';
+        chrome.storage.local.set({ pp_bridge_mode: mode });
+        console.log('[Content] 已同步通信模式到扩展存储:', mode);
     }
 });

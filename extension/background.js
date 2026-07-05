@@ -1004,7 +1004,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'magnetPreview') {
         const magnet = request.magnet;
         (async () => {
-            // 1) 先试直连 whatslink.info（快: 3s 超时，重试 1 次）
+            // 1) 先试直连 whatslink.info（3s 超时，重试 1 次）
             let lastError;
             for (let attempt = 1; attempt <= 2; attempt++) {
                 try {
@@ -1037,25 +1037,30 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     if (attempt === 1) { await new Promise(r => setTimeout(r, 1000)); }
                 }
             }
-            // 2) 直连失败 → 有隧道代理就走隧道
-            const stored = await chrome.storage.local.get('pp_cors_proxy');
-            const proxyBase = stored.pp_cors_proxy;
-            if (proxyBase) {
-                try {
-                    const proxyUrl = proxyBase + encodeURIComponent(`https://whatslink.info/api/v1/link?url=${encodeURIComponent(magnet)}`);
-                    const c2 = new AbortController();
-                    const t2 = setTimeout(() => c2.abort(), 10000);
-                    let proxyResp;
-                    try { proxyResp = await fetch(proxyUrl, { signal: c2.signal }); } finally { clearTimeout(t2); }
-                    if (proxyResp.ok) {
-                        const data = await proxyResp.json();
-                        sendResponse({ success: true, data: data });
+            // 2) 直连失败 → 仅在代理模式下走隧道回退
+            const mode = (await chrome.storage.local.get('pp_bridge_mode')).pp_bridge_mode;
+            if (mode === 'proxy') {
+                const stored = await chrome.storage.local.get('pp_cors_proxy');
+                const proxyBase = stored.pp_cors_proxy;
+                if (proxyBase) {
+                    try {
+                        const proxyUrl = proxyBase + encodeURIComponent(`https://whatslink.info/api/v1/link?url=${encodeURIComponent(magnet)}`);
+                        const c2 = new AbortController();
+                        const t2 = setTimeout(() => c2.abort(), 10000);
+                        let proxyResp;
+                        try { proxyResp = await fetch(proxyUrl, { signal: c2.signal }); } finally { clearTimeout(t2); }
+                        if (proxyResp.ok) {
+                            const data = await proxyResp.json();
+                            sendResponse({ success: true, data: data });
+                            return;
+                        }
+                        throw new Error(`HTTP ${proxyResp.status}`);
+                    } catch (e) {
+                        sendResponse({ success: false, error: '预览失败 (直连: ' + (lastError?.name === 'AbortError' ? '超时' : (lastError?.message || '')) + ', 隧道: ' + (e.name === 'AbortError' ? '超时' : (e.message || '')) + ')' });
                         return;
                     }
-                    throw new Error(`HTTP ${proxyResp.status}`);
-                } catch (e) {
-                    sendResponse({ success: false, error: '预览失败 (直连: ' + (lastError?.name === 'AbortError' ? '超时' : (lastError?.message || '')) + ', 隧道: ' + (e.name === 'AbortError' ? '超时' : (e.message || '')) + ')' });
                 }
+                sendResponse({ success: false, error: '预览失败: 代理模式下未配置代理地址' });
                 return;
             }
             const msg = lastError?.name === 'AbortError' ? '超时' : (lastError?.message || '失败');
