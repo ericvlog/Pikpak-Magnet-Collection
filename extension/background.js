@@ -1027,7 +1027,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 const data = await response.json();
                 sendResponse({ success: true, data: data });
             } catch (error) {
-                console.log('[预览] 直连失败，尝试代理回退:', error.message);
+                const errMsg = error.name === 'AbortError' ? '预览请求超时' : error.message;
+                console.log('[预览] 直连失败，尝试代理回退:', errMsg);
                 try {
                     const stored = await chrome.storage.local.get('pp_cors_proxy');
                     const proxyBase = stored.pp_cors_proxy;
@@ -1048,7 +1049,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     }
                     throw new Error('未配置代理地址');
                 } catch (proxyErr) {
-                    sendResponse({ success: false, error: error.message + ' (代理回退: ' + proxyErr.message + ')' });
+                    sendResponse({ success: false, error: errMsg + ' (代理回退: ' + proxyErr.message + ')' });
                 }
             }
         })();
