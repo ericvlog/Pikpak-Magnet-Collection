@@ -1151,12 +1151,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     headers['Cookie'] = cookieString;
                 }
 
-                // 4. 第一次请求
-                let response = await fetch(url, {
-                    mode: 'cors',
-                    credentials: 'include',
-                    headers: headers,
-                });
+                // 4. 直接下载（扩展后台无需 CORS）
+                let response = await fetch(url, { headers });
 
                 let contentType = response.headers.get('content-type') || '';
 
@@ -1189,11 +1185,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     let proxySuccess = false;
                     for (const proxyUrl of proxyUrls) {
                         try {
-                            const proxyResp = await fetch(proxyUrl, {
-                                mode: 'cors',
-                                credentials: 'omit',
-                                headers: simpleHeaders,
-                            });
+                            const proxyResp = await fetch(proxyUrl, { headers: simpleHeaders });
                             const proxyContentType = proxyResp.headers.get('content-type') || '';
                             if (proxyContentType.startsWith('image/') && proxyResp.ok) {
                                 response = proxyResp;
@@ -1210,10 +1202,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     // 如果所有代理都失败，最后尝试裸请求
                     if (!proxySuccess) {
                         console.warn('[后台] 所有代理失败，尝试裸请求');
-                        response = await fetch(url, {
-                            mode: 'cors',
-                            credentials: 'omit',
-                        });
+                        response = await fetch(url);
                         contentType = response.headers.get('content-type') || '';
                     }
                 }
