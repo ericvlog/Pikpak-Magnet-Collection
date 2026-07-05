@@ -15,14 +15,6 @@ window.addEventListener('unhandledrejection', function(event) {
 document.documentElement.setAttribute('data-extension-installed', 'true');
 window.postMessage({ type: 'EXTENSION_READY' }, '*');
 
-// ===== 注入页面脚本读取 localStorage 中的代理地址 =====
-(function() {
-    const s = document.createElement('script');
-    s.textContent = '(function(){var p=localStorage.getItem("pp_cors_proxy");if(p)window.postMessage({type:"PP_PROXY_UPDATED",proxy:p},"*");})();';
-    document.documentElement.appendChild(s);
-    setTimeout(() => s.remove(), 100);
-})();
-
 // ===== 与后台通信的封装（带错误静默） =====
 function sendMessageToBackground(message, callback) {
     try {

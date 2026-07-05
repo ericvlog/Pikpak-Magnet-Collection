@@ -1004,54 +1004,42 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'magnetPreview') {
         const magnet = request.magnet;
         (async () => {
-            try {
-                const url = `https://whatslink.info/api/v1/link?url=${encodeURIComponent(magnet)}`;
-                const controller = new AbortController();
-                const t1 = setTimeout(() => controller.abort(), 8000);
-                let response;
+            let lastError;
+            for (let attempt = 1; attempt <= 2; attempt++) {
                 try {
-                    response = await fetch(url, {
-                        signal: controller.signal,
-                        headers: {
-                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                            'Cache-Control': 'no-cache',
-                            'Pragma': 'no-cache'
-                        },
-                        cache: 'no-cache'
-                    });
-                } finally { clearTimeout(t1); }
-                if (response.status === 429) {
-                    throw new Error('预览服务繁忙 (429)');
-                }
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                const data = await response.json();
-                sendResponse({ success: true, data: data });
-            } catch (error) {
-                const errMsg = error.name === 'AbortError' ? '预览请求超时' : error.message;
-                console.log('[预览] 直连失败，尝试代理回退:', errMsg);
-                try {
-                    const stored = await chrome.storage.local.get('pp_cors_proxy');
-                    const proxyBase = stored.pp_cors_proxy;
-                    if (proxyBase) {
-                        const proxyUrl = proxyBase + encodeURIComponent(`https://whatslink.info/api/v1/link?url=${encodeURIComponent(magnet)}`);
-                        const c2 = new AbortController();
-                        const t2 = setTimeout(() => c2.abort(), 8000);
-                        let proxyResp;
-                        try {
-                            proxyResp = await fetch(proxyUrl, { signal: c2.signal });
-                        } finally { clearTimeout(t2); }
-                        if (proxyResp.ok) {
-                            const proxyData = await proxyResp.json();
-                            sendResponse({ success: true, data: proxyData });
-                            return;
-                        }
-                        throw new Error(`代理返回 HTTP ${proxyResp.status}`);
+                    const url = `https://whatslink.info/api/v1/link?url=${encodeURIComponent(magnet)}`;
+                    const controller = new AbortController();
+                    const t = setTimeout(() => controller.abort(), 8000);
+                    let response;
+                    try {
+                        response = await fetch(url, {
+                            signal: controller.signal,
+                            headers: {
+                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                                'Cache-Control': 'no-cache',
+                                'Pragma': 'no-cache'
+                            },
+                            cache: 'no-cache'
+                        });
+                    } finally { clearTimeout(t); }
+                    if (response.status === 429) {
+                        throw new Error('繁忙');
                     }
-                    throw new Error('未配置代理地址');
-                } catch (proxyErr) {
-                    sendResponse({ success: false, error: errMsg + ' (代理回退: ' + proxyErr.message + ')' });
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    const data = await response.json();
+                    sendResponse({ success: true, data: data });
+                    return;
+                } catch (e) {
+                    lastError = e;
+                    if (e.message === '繁忙') break;
+                    if (attempt === 1) {
+                        console.log('[预览] 第 1 次失败，重试...');
+                        await new Promise(r => setTimeout(r, 1000));
+                    }
                 }
             }
+            const msg = lastError.name === 'AbortError' ? '预览请求超时' : (lastError.message || '预览失败');
+            sendResponse({ success: false, error: msg });
         })();
         return true;
     }

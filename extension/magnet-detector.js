@@ -615,10 +615,13 @@
         return (size < 10 ? size.toFixed(2) : size.toFixed(1)) + ' ' + units[i];
     }
 
-    function showToast(msg, isError = false) {
+    let currentToast = null;
+    function showToast(msg, isError = false, extraEl = null) {
         if (cooldownToast) return;
+        if (currentToast) currentToast.remove();
         const div = document.createElement('div');
         div.textContent = msg;
+        if (extraEl) div.appendChild(extraEl);
         div.style.cssText = `
             position: fixed;
             bottom: 30px;
@@ -635,11 +638,17 @@
             animation: fadeInUp 0.3s ease;
         `;
         document.body.appendChild(div);
-        setTimeout(() => {
-            div.style.opacity = '0';
-            div.style.transition = 'opacity 0.3s';
-            setTimeout(() => div.remove(), 400);
-        }, 2500);
+        currentToast = div;
+        if (!extraEl) {
+            setTimeout(() => {
+                div.style.opacity = '0';
+                div.style.transition = 'opacity 0.3s';
+                setTimeout(() => { if (currentToast === div) currentToast = null; div.remove(); }, 400);
+            }, 2500);
+        }
+    }
+    function hideToast() {
+        if (currentToast) { currentToast.remove(); currentToast = null; }
     }
 
     // ===== 与后台通信 =====
@@ -1026,14 +1035,18 @@
                         showToast('预览服务繁忙，已记录失败磁力', true);
                     }
                 } else {
-                    // 其他错误，降级为简易弹窗
-                    if (confirm(`检测到磁力链接：\n${magnetLink}\n\n是否立即离线到 PikPak？`)) {
+                    const btn = document.createElement('a');
+                    btn.textContent = '离线到PikPak';
+                    btn.href = '#';
+                    btn.style.cssText = 'font-weight:bold;color:#4fc3f7;margin-left:12px;cursor:pointer';
+                    btn.onclick = function(e) {
+                        e.preventDefault();
+                        hideToast();
                         offlineToPikPak(magnetLink)
                             .then(() => showToast('✅ 已发送到 PikPak'))
                             .catch(err => showToast('❌ ' + err.message, true));
-                    } else {
-                        showToast('预览失败：' + errorMsg, true);
-                    }
+                    };
+                    showToast('预览失败：' + errorMsg, true, btn);
                 }
             });
     }
