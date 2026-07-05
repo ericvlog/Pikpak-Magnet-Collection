@@ -808,15 +808,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     // 待导入队列
     if (request.action === 'getPendingMagnets') {
-        (async () => {
+        console.log('[后台] 收到待导入队列请求');
+        chrome.storage.local.get('pendingMagnets', (result) => {
             try {
-                const result = await chrome.storage.local.get(['pendingMagnets']);
                 const pending = result.pendingMagnets || [];
+                console.log('[后台] 待导入队列:', pending.length, '条');
                 sendResponse({ success: true, data: pending.slice(-10), total: pending.length });
             } catch (err) {
+                console.error('[后台] 待导入队列处理错误:', err);
                 sendResponse({ success: false, error: err.message });
             }
-        })();
+        });
         return true;
     }
 
