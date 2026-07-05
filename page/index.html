@@ -3912,6 +3912,7 @@ document.getElementById('gdriveManageBtn').onclick = async () => { await initGDr
                 const val = input.value.trim();
                 if (val) {
                     localStorage.setItem('pp_cors_proxy', val);
+                    window.postMessage({ type: 'PP_PROXY_UPDATED', proxy: val }, '*');
                     testProxy();
                 }
             };

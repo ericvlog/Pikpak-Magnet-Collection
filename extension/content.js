@@ -291,4 +291,13 @@ window.addEventListener('message', (event) => {
             }, '*');
         });
     }
+
+    // --- 代理地址同步 ---
+    if (event.data.type === 'PP_PROXY_UPDATED') {
+        const proxy = event.data.proxy;
+        if (proxy) {
+            chrome.storage.local.set({ pp_cors_proxy: proxy });
+            console.log('[Content] 已保存代理地址到扩展存储:', proxy.substring(0, 40) + '...');
+        }
+    }
 });
