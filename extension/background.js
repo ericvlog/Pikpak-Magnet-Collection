@@ -1038,8 +1038,30 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     }
                 }
             }
-            const msg = lastError.name === 'AbortError' ? '预览请求超时' : (lastError.message || '预览失败');
-            sendResponse({ success: false, error: msg });
+            // 直连失败 → 走页面配置的隧道代理（和页面代理模式同路）
+            console.log('[预览] 直连失败，尝试隧道代理回退:', lastError?.message);
+            try {
+                const stored = await chrome.storage.local.get('pp_cors_proxy');
+                const proxyBase = stored.pp_cors_proxy;
+                if (proxyBase) {
+                    const proxyUrl = proxyBase + encodeURIComponent(`https://whatslink.info/api/v1/link?url=${encodeURIComponent(magnet)}`);
+                    const c2 = new AbortController();
+                    const t2 = setTimeout(() => c2.abort(), 10000);
+                    let proxyResp;
+                    try {
+                        proxyResp = await fetch(proxyUrl, { signal: c2.signal });
+                    } finally { clearTimeout(t2); }
+                    if (proxyResp.ok) {
+                        const proxyData = await proxyResp.json();
+                        sendResponse({ success: true, data: proxyData });
+                        return;
+                    }
+                    throw new Error(`代理返回 HTTP ${proxyResp.status}`);
+                }
+                throw new Error('未配置代理');
+            } catch (proxyErr) {
+                sendResponse({ success: false, error: '预览失败: ' + (lastError?.name === 'AbortError' ? '超时' : (lastError?.message || '')) + ' (隧道回退: ' + proxyErr.message + ')' });
+            }
         })();
         return true;
     }
