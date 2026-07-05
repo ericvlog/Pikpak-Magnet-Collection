@@ -23,7 +23,7 @@ function sendMessageToBackground(message, callback) {
                 const errMsg = chrome.runtime.lastError.message;
                 if (errMsg.includes('Extension context invalidated') ||
                     errMsg.includes('message port closed')) {
-                    // 静默忽略
+                    if (callback) callback(null);
                     return;
                 }
                 console.warn('[图片助手] 发送消息失败:', errMsg);
@@ -36,6 +36,7 @@ function sendMessageToBackground(message, callback) {
         if (!e.message?.includes('Extension context')) {
             console.warn('[图片助手] 发送消息异常:', e);
         }
+        if (callback) callback(null);
     }
 }
 
