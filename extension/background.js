@@ -1004,12 +1004,35 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'magnetPreview') {
         const magnet = request.magnet;
         (async () => {
+            // 先检查是否有隧道代理
+            const stored = await chrome.storage.local.get('pp_cors_proxy');
+            const proxyBase = stored.pp_cors_proxy;
+            if (proxyBase) {
+                // 有隧道代理 → 直走隧道，跳过 whatslink.info 直连（已知在网络环境下永远超时）
+                try {
+                    const proxyUrl = proxyBase + encodeURIComponent(`https://whatslink.info/api/v1/link?url=${encodeURIComponent(magnet)}`);
+                    const controller = new AbortController();
+                    const t = setTimeout(() => controller.abort(), 10000);
+                    let proxyResp;
+                    try { proxyResp = await fetch(proxyUrl, { signal: controller.signal }); } finally { clearTimeout(t); }
+                    if (proxyResp.ok) {
+                        const data = await proxyResp.json();
+                        sendResponse({ success: true, data: data });
+                        return;
+                    }
+                    throw new Error(`HTTP ${proxyResp.status}`);
+                } catch (e) {
+                    sendResponse({ success: false, error: '预览失败 (隧道: ' + (e.name === 'AbortError' ? '超时' : (e.message || '')) + ')' });
+                }
+                return;
+            }
+            // 无代理 → 直连 whatslink.info（4s 超时，重试 1 次）
             let lastError;
             for (let attempt = 1; attempt <= 2; attempt++) {
                 try {
                     const url = `https://whatslink.info/api/v1/link?url=${encodeURIComponent(magnet)}`;
                     const controller = new AbortController();
-                    const t = setTimeout(() => controller.abort(), 8000);
+                    const t = setTimeout(() => controller.abort(), 4000);
                     let response;
                     try {
                         response = await fetch(url, {
@@ -1022,9 +1045,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                             cache: 'no-cache'
                         });
                     } finally { clearTimeout(t); }
-                    if (response.status === 429) {
-                        throw new Error('繁忙');
-                    }
+                    if (response.status === 429) throw new Error('繁忙');
                     if (!response.ok) throw new Error(`HTTP ${response.status}`);
                     const data = await response.json();
                     sendResponse({ success: true, data: data });
@@ -1033,35 +1054,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     lastError = e;
                     if (e.message === '繁忙') break;
                     if (attempt === 1) {
-                        console.log('[预览] 第 1 次失败，重试...');
+                        console.log('[预览] 重试...');
                         await new Promise(r => setTimeout(r, 1000));
                     }
                 }
             }
-            // 直连失败 → 走页面配置的隧道代理（和页面代理模式同路）
-            console.log('[预览] 直连失败，尝试隧道代理回退:', lastError?.message);
-            try {
-                const stored = await chrome.storage.local.get('pp_cors_proxy');
-                const proxyBase = stored.pp_cors_proxy;
-                if (proxyBase) {
-                    const proxyUrl = proxyBase + encodeURIComponent(`https://whatslink.info/api/v1/link?url=${encodeURIComponent(magnet)}`);
-                    const c2 = new AbortController();
-                    const t2 = setTimeout(() => c2.abort(), 10000);
-                    let proxyResp;
-                    try {
-                        proxyResp = await fetch(proxyUrl, { signal: c2.signal });
-                    } finally { clearTimeout(t2); }
-                    if (proxyResp.ok) {
-                        const proxyData = await proxyResp.json();
-                        sendResponse({ success: true, data: proxyData });
-                        return;
-                    }
-                    throw new Error(`代理返回 HTTP ${proxyResp.status}`);
-                }
-                throw new Error('未配置代理');
-            } catch (proxyErr) {
-                sendResponse({ success: false, error: '预览失败: ' + (lastError?.name === 'AbortError' ? '超时' : (lastError?.message || '')) + ' (隧道回退: ' + proxyErr.message + ')' });
-            }
+            const msg = lastError?.name === 'AbortError' ? '超时' : (lastError?.message || '失败');
+            sendResponse({ success: false, error: '预览失败: ' + msg });
         })();
         return true;
     }
