@@ -306,4 +306,11 @@ window.addEventListener('message', (event) => {
         chrome.storage.local.set({ pp_bridge_mode: mode });
         console.log('[Content] 已同步通信模式到扩展存储:', mode);
     }
+
+    // --- 连通性测试 ---
+    if (event.data.type === 'REQUEST_CONNECTION_TEST') {
+        sendMessageToBackground({ action: 'testConnection' }, (response) => {
+            window.postMessage({ type: 'CONNECTION_TEST_RESULT', success: response?.success || false, data: response?.data || [], error: response?.error }, '*');
+        });
+    }
 });

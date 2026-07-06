@@ -1037,36 +1037,29 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             for (let attempt = 1; attempt <= 2; attempt++) {
                 try {
                     const url = `https://whatslink.info/api/v1/link?url=${encodeURIComponent(magnet)}`;
-                    const controller = new AbortController();
-                    const t = setTimeout(() => controller.abort(), 8000);
-                    let response;
-                    try {
-                        response = await fetch(url, {
-                            signal: controller.signal,
-                            headers: {
-                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36',
-                                'Accept': 'application/json, text/plain, */*',
-                                'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-                                'Referer': 'https://whatslink.info/',
-                                'Cache-Control': 'no-cache',
-                                'Pragma': 'no-cache'
-                            },
-                            cache: 'no-cache'
-                        });
-                    } finally { clearTimeout(t); }
-                    if (response.status === 429) throw new Error('繁忙');
+                    const response = await fetch(url, {
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36',
+                            'Accept': 'application/json, text/plain, */*',
+                            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+                            'Referer': 'https://whatslink.info/',
+                            'Cache-Control': 'no-cache',
+                            'Pragma': 'no-cache'
+                        },
+                        cache: 'no-cache'
+                    });
+                    if (response.status === 429) throw new Error('预览服务繁忙 (429)');
                     if (!response.ok) throw new Error(`HTTP ${response.status}`);
                     const data = await response.json();
                     sendResponse({ success: true, data: data });
                     return;
-                } catch (e) {
-                    lastError = e;
-                    if (e.message === '繁忙') break;
-                    if (attempt === 1) { await new Promise(r => setTimeout(r, 1000)); }
+                } catch (error) {
+                    lastError = error;
+                    if (error.message === '预览服务繁忙 (429)') break;
+                    if (attempt === 1) await new Promise(r => setTimeout(r, 1500));
                 }
             }
-            const msg = lastError?.name === 'AbortError' ? '超时' : (lastError?.message || '失败');
-            sendResponse({ success: false, error: '预览失败: ' + msg });
+            sendResponse({ success: false, error: lastError.message });
         })();
         return true;
     }
@@ -1116,42 +1109,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     whitelist = await getWhitelist();
                 }
 
-                // 2. 获取目标域名的 Cookie
-                let cookieString = '';
-                try {
-                    const cookies = await new Promise((resolve) => {
-                        chrome.cookies.getAll({ domain: hostname }, (cookies) => {
-                            if (chrome.runtime.lastError) {
-                                resolve([]);
-                                return;
-                            }
-                            resolve(cookies);
-                        });
-                    });
-                    cookieString = cookies.map(c => `${c.name}=${c.value}`).join('; ');
-                    console.log('[后台] 获取到的Cookie:', cookieString);
-                } catch (err) {
-                    console.warn('[后台] 获取Cookie失败，继续请求:', err.message);
-                }
-
-                // 3. 构造请求头（模拟真实浏览器）
+                // 2. 构造请求头（模拟真实浏览器，去掉可能冲突的 Origin/Sec-Fetch/手动 Cookie）
                 const headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36',
                     'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
                     'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-                    'Referer': referer || urlObj.origin + '/',
-                    'Origin': urlObj.origin,
-                    'Sec-Fetch-Site': 'same-origin',
-                    'Sec-Fetch-Mode': 'cors',
-                    'Sec-Fetch-Dest': 'image',
+                    'Referer': 'https://whatslink.info/',
                     'Cache-Control': 'no-cache',
                     'Pragma': 'no-cache',
                 };
-                if (cookieString) {
-                    headers['Cookie'] = cookieString;
-                }
 
-                // 4. 直接下载（扩展后台无需 CORS）
+                // 4. 直接下载（由浏览器自动处理 Cookie）
                 let response = await fetch(url, { headers });
 
                 let contentType = response.headers.get('content-type') || '';
@@ -1178,9 +1146,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         'Accept': headers['Accept'],
                         'Referer': headers['Referer'],
                     };
-                    if (cookieString) {
-                        simpleHeaders['Cookie'] = cookieString;
-                    }
 
                     let proxySuccess = false;
                     for (const proxyUrl of proxyUrls) {
@@ -1295,6 +1260,28 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             } catch (error) {
                 safeSend({ success: false, error: error.message });
             }
+        })();
+        return true;
+    }
+
+    // ===== 连通性测试 =====
+    if (request.action === 'testConnection') {
+        (async () => {
+            const results = [];
+            async function test(label, url) {
+                const t0 = performance.now();
+                try {
+                    const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+                    const t = Math.round(performance.now() - t0);
+                    results.push({ label, status: r.status, time: t, ok: r.ok });
+                } catch (e) {
+                    results.push({ label, status: 'ERR', time: Math.round(performance.now() - t0), ok: false, error: e.message });
+                }
+            }
+            await test('首页', 'https://whatslink.info/');
+            await test('API', 'https://whatslink.info/api/v1/link?url=magnet:?xt=urn:btih:49bbf852e1079e399b43531a79ca571d6e962d87');
+            await test('图片', 'https://whatslink.info/image/713877e51b2afcaffcdfda98b28b0147');
+            sendResponse({ success: true, data: results });
         })();
         return true;
     }

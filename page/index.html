@@ -859,6 +859,7 @@
             </div>
 <button id="gdriveManageBtn" class="btn btn-primary" style="background:#4285f4;color:white;">☁️ 云端管理</button>
 <button id="pagePikpakLoginBtn" class="btn" style="background:#306eff;color:white;"><i class="fas fa-key"></i> <span id="pagePikpakBtnLabel">PikPak 登录</span></button>
+<button id="connectionTestBtn" class="btn btn-outline" style="font-size:0.8rem;">🔍 测试连通性</button>
 <button id="clipboardWatchToggleBtn" class="btn btn-success">🟢 监视剪贴板</button>
         </div></div></div>
         <div class="drag-area" id="tagsDragArea"><div class="drag-header" data-target="tagsContent"><div class="drag-title"><i class="fas fa-hashtag"></i> 🏷️ 拖拽标签可排序（点击筛选）</div><i class="fas fa-chevron-down toggle-icon"></i></div><div class="drag-content" id="tagsContent"><div id="draggableTagsList" class="tags-container"></div></div></div>
@@ -4250,6 +4251,31 @@ document.getElementById('pagePikpakLoginBtn').onclick = () => { ppUpdateLoginUI(
             const savedMode = localStorage.getItem('pp_bridge_mode') || 'extension';
             document.querySelectorAll('input[name="ppBridgeMode"]').forEach(el => { if (el.value === savedMode) el.checked = true; });
             document.getElementById('clipboardWatchToggleBtn').addEventListener('click', toggleClipboardWatch);
+            document.getElementById('connectionTestBtn').addEventListener('click', async () => {
+                const btn = document.getElementById('connectionTestBtn');
+                btn.textContent = '⏳ 测试中...';
+                btn.disabled = true;
+                try {
+                    const result = await new Promise((resolve, reject) => {
+                        const handler = (event) => {
+                            if (event.data.type === 'CONNECTION_TEST_RESULT') {
+                                window.removeEventListener('message', handler);
+                                if (event.data.success) resolve(event.data.data);
+                                else reject(new Error(event.data.error || '测试失败'));
+                            }
+                        };
+                        window.addEventListener('message', handler);
+                        window.postMessage({ type: 'REQUEST_CONNECTION_TEST' }, '*');
+                        setTimeout(() => { window.removeEventListener('message', handler); reject(new Error('扩展未响应')); }, 120000);
+                    });
+                    let msg = result.map(r => `${r.label}: ${r.ok ? '✅' : '❌'} ${r.status} ${r.time}ms`).join('\n');
+                    alert('whatslink.info 连通性测试结果：\n\n' + msg + '\n\n首页200+API失败=源站问题');
+                } catch (e) {
+                    alert('测试失败：' + e.message);
+                }
+                btn.textContent = '🔍 测试连通性';
+                btn.disabled = false;
+            });
             loadClipboardQueue();
             initClipboardMagnetWatcher();
             console.log('初始化完成，所有按钮功能正常。');

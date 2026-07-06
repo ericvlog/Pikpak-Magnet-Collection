@@ -1019,35 +1019,96 @@
                 const errorMsg = err.message || '预览失败';
                 console.warn('[Magnet Detector] 预览失败:', errorMsg);
 
-                // 如果是 429 或繁忙，记录到失败列表
+                // 从磁力链接提取标题
+                let title = magnetLink;
+                const dnMatch = magnetLink.match(/[?&]dn=([^&]+)/i);
+                if (dnMatch) {
+                    try { title = decodeURIComponent(dnMatch[1]); } catch(e) {}
+                } else {
+                    // 找页面中最近的链接文本
+                    const btn = document.querySelector(`.pk-magnet-btn[data-magnet="${CSS.escape(magnetLink)}"]`);
+                    if (btn && btn.parentElement) {
+                        const prev = btn.parentElement.querySelector('a');
+                        if (prev) title = prev.textContent.trim();
+                    }
+                }
+                const hash = (magnetLink.match(/btih:([a-fA-F0-9]{40})/i) || [])[1] || '';
+                const size = '';
+
+                // 429 时记录到失败列表
                 if (errorMsg.includes('429') ||
                     errorMsg.includes('繁忙') ||
                     errorMsg.includes('too many requests') ||
                     errorMsg.includes('限流') ||
                     errorMsg.includes('冷却')) {
-                    let title = '未知资源';
-                    const dnMatch = magnetLink.match(/&dn=([^&]+)/i);
-                    if (dnMatch) {
-                        try { title = decodeURIComponent(dnMatch[1]); } catch(e) {}
-                    }
                     saveFailedMagnet(magnetLink, title);
                     if (!cooldownToast) {
                         showToast('预览服务繁忙，已记录失败磁力', true);
                     }
-                } else {
-                    const btn = document.createElement('a');
-                    btn.textContent = '离线到PikPak';
-                    btn.href = '#';
-                    btn.style.cssText = 'font-weight:bold;color:#4fc3f7;margin-left:12px;cursor:pointer';
-                    btn.onclick = function(e) {
-                        e.preventDefault();
-                        hideToast();
-                        offlineToPikPak(magnetLink)
-                            .then(() => showToast('✅ 已发送到 PikPak'))
-                            .catch(err => showToast('❌ ' + err.message, true));
-                    };
-                    showToast('预览失败：' + errorMsg, true, btn);
                 }
+
+                // 弹出简化窗口：有标题和操作按钮，无预览图
+                const overlay = document.createElement('div');
+                overlay.className = 'pk-magnet-preview-overlay';
+                overlay.innerHTML = `
+                    <div class="pk-magnet-preview-card">
+                        <div class="pk-magnet-preview-hero" style="min-height:40px;">
+                            <div style="color:#888;font-size:14px;padding:10px;">预览暂不可用（${errorMsg}）</div>
+                            <button class="pk-magnet-preview-close">✖</button>
+                        </div>
+                        <div class="pk-magnet-preview-body">
+                            <div>
+                                <div class="pk-magnet-preview-title" contenteditable="plaintext-only">${escapeHtml(title)}</div>
+                                <div class="pk-magnet-preview-desc">whatslink.info 暂时无法预览，仍可直接操作：</div>
+                            </div>
+                            ${hash ? `<div class="pk-magnet-preview-hash">磁力：${hash}</div>` : ''}
+                            <div class="pk-magnet-preview-actions" style="margin-top:14px;">
+                                <button class="btn-outline" data-action="offline">离线到 PikPak</button>
+                                <button class="btn-outline" data-action="save">保存到管理器</button>
+                                <button class="btn-primary" data-action="both">离线并保存</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(overlay);
+
+                let selectedParentId = '';
+                const close = () => overlay.remove();
+                overlay.querySelector('.pk-magnet-preview-close').addEventListener('click', close);
+                overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+                overlay.querySelectorAll('[data-action]').forEach(btn => {
+                    btn.addEventListener('click', async () => {
+                        const action = btn.dataset.action;
+                        const originalText = btn.textContent;
+                        btn.disabled = true;
+                        btn.textContent = '处理中...';
+                        try {
+                            if (action === 'offline') {
+                                await offlineToPikPak(magnetLink, selectedParentId);
+                                showToast('✅ 已发送到 PikPak');
+                                close();
+                            } else if (action === 'save') {
+                                const editedName = (overlay.querySelector('.pk-magnet-preview-title').textContent || '').trim() || title;
+                                await saveMagnetToManager(magnetLink, editedName, size, '');
+                                showToast('✅ 已保存到管理器');
+                                close();
+                            } else if (action === 'both') {
+                                const editedName = (overlay.querySelector('.pk-magnet-preview-title').textContent || '').trim() || title;
+                                await Promise.all([
+                                    offlineToPikPak(magnetLink, selectedParentId),
+                                    saveMagnetToManager(magnetLink, editedName, size, '')
+                                ]);
+                                showToast('✅ 已离线并保存');
+                                close();
+                            }
+                        } catch (err) {
+                            showToast('❌ ' + err.message, true);
+                            btn.disabled = false;
+                            btn.textContent = originalText;
+                        }
+                    });
+                });
             });
     }
 
