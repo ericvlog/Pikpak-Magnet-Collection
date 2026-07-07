@@ -1,2 +1,9 @@
 *.exe
 node_modules/
+
+# telegram-bot runtime
+telegram-bot/.env
+telegram-bot/.user_session
+telegram-bot/fileMap.json
+telegram-bot/pending.json
+telegram-bot/images/

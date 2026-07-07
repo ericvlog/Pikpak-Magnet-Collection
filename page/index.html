@@ -859,6 +859,7 @@
             </div>
 <button id="gdriveManageBtn" class="btn btn-primary" style="background:#4285f4;color:white;">☁️ 云端管理</button>
 <button id="pagePikpakLoginBtn" class="btn" style="background:#306eff;color:white;"><i class="fas fa-key"></i> <span id="pagePikpakBtnLabel">PikPak 登录</span></button>
+<button id="telegramLoginBtn" class="btn" style="background:#0088cc;color:white;font-size:0.8rem;"><i class="fas fa-paper-plane"></i> <span id="telegramLoginLabel">TG 登录</span></button>
 <button id="connectionTestBtn" class="btn btn-outline" style="font-size:0.8rem;">🔍 测试连通性</button>
 <button id="clipboardWatchToggleBtn" class="btn btn-success">🟢 监视剪贴板</button>
         </div></div></div>
@@ -898,6 +899,9 @@
 
 <!-- ===== PikPak 登录模态框（无扩展时使用） ===== -->
 <div id="pikpakModal" class="modal"><div class="modal-card" style="max-width:420px;"><div class="flex-between"><h3>🔑 PikPak 登录（页面直连）</h3><button id="closePikpakModalBtn" class="icon-btn">✖</button></div><div style="padding:1.5rem;display:flex;flex-direction:column;gap:14px;"><div style="font-size:0.85rem;line-height:1.5;color:var(--text-secondary);">登录后可在无扩展环境下（如手机浏览器）直接离线下载到 PikPak。密码仅存储在你本地浏览器中。</div><input type="text" id="pagePikpakUser" placeholder="邮箱 / 手机号 / 用户名" style="width:100%;padding:10px 14px;border-radius:12px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--text-primary);"><input type="password" id="pagePikpakPass" placeholder="密码" style="width:100%;padding:10px 14px;border-radius:12px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--text-primary);"><div id="pagePikpakStatus" style="font-size:0.85rem;padding:8px 12px;background:var(--tag-bg);border-radius:12px;text-align:center;">未登录</div><div style="display:flex;align-items:center;gap:6px;font-size:0.77rem;"><input type="text" id="ppProxyInput" value="" placeholder="CORS 代理地址，见 github.com/ericvlog/Pikpak-Magnet-Collection（推荐安装扩展，无需配置）" style="flex:1;padding:6px 10px;border-radius:8px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--text-primary);font-size:inherit;"><button id="ppSaveProxyBtn" style="padding:4px 10px;border-radius:8px;border:1px solid var(--input-border);background:var(--btn-bg);color:var(--text-primary);cursor:pointer;font-size:inherit;">保存</button><span id="ppProxyPingResult" style="font-size:0.8rem;margin-left:auto;"></span></div><div style="font-size:0.75rem;color:var(--text-secondary);line-height:1.4;">💡 推荐使用浏览器扩展（无需配置代理）：<a href="https://github.com/ericvlog/Pikpak-Magnet-Collection" target="_blank" style="color:#306eff;">github.com/ericvlog/Pikpak-Magnet-Collection</a></div><div style="border-top:1px solid var(--border-color);padding-top:10px;"><div style="font-size:0.82rem;font-weight:600;margin-bottom:8px;">📡 通信模式</div><label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;margin-bottom:6px;padding:4px 0;"><input type="radio" name="ppBridgeMode" value="extension" onclick="localStorage.setItem('pp_bridge_mode','extension');_ppBridgeMode='extension';window.postMessage({type:'PP_MODE_UPDATED',mode:'extension'},'*')"><span>扩展模式 — 仅通过扩展桥接，超时重试</span></label><label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;padding:4px 0;"><input type="radio" name="ppBridgeMode" value="proxy" onclick="localStorage.setItem('pp_bridge_mode','proxy');_ppBridgeMode='proxy';window.postMessage({type:'PP_MODE_UPDATED',mode:'proxy'},'*')"><span>代理模式 — 仅通过 CORS 代理，跳过扩展</span></label></div><div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;"><button id="pagePikpakLoginBtn2" class="btn btn-primary" style="flex:1;">登录</button><button id="pagePikpakRefreshBtn" class="btn btn-outline" style="display:none;flex:1;">🔄 刷新 Token</button><button id="pagePikpakLogoutBtn" class="btn btn-danger" style="display:none;flex:1;">退出登录</button></div></div></div></div>
+
+<!-- ===== Telegram 登录模态框（用于转发到 @PikPakBot） ===== -->
+<div id="telegramLoginModal" class="modal"><div class="modal-card" style="max-width:400px;"><div class="flex-between"><h3>✈️ Telegram 登录</h3><button id="closeTelegramLoginModalBtn" class="icon-btn">✖</button></div><div style="padding:1.5rem;display:flex;flex-direction:column;gap:14px;"><div id="tgStepPhone" style="display:flex;flex-direction:column;gap:10px;"><div style="font-size:0.85rem;color:var(--text-secondary);">输入你的 Telegram 手机号（含区号，如 +8613800138000）</div><input type="text" id="tgPhoneInput" placeholder="+8613800138000" style="width:100%;padding:10px 14px;border-radius:12px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--text-primary);"><button id="tgSendCodeBtn" class="btn btn-primary" style="width:100%;">发送验证码</button></div><div id="tgStepCode" style="display:none;flex-direction:column;gap:10px;"><div style="font-size:0.85rem;color:var(--text-secondary);">输入 Telegram 发送到你的验证码</div><input type="text" id="tgCodeInput" placeholder="12345" style="width:100%;padding:10px 14px;border-radius:12px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--text-primary);"><button id="tgSignInBtn" class="btn btn-primary" style="width:100%;">登录</button></div><div id="tgStep2fa" style="display:none;flex-direction:column;gap:10px;"><div style="font-size:0.85rem;color:var(--text-secondary);">你的账号启用了两步验证，请输入密码</div><input type="password" id="tg2faInput" placeholder="密码" style="width:100%;padding:10px 14px;border-radius:12px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--text-primary);"><button id="tg2faBtn" class="btn btn-primary" style="width:100%;">验证</button></div><div id="tgLoginStatus" style="font-size:0.85rem;padding:8px 12px;background:var(--tag-bg);border-radius:12px;text-align:center;"></div></div></div></div>
 
 <script>
 (function(){
@@ -1311,47 +1315,201 @@
         return await _ppCreateFolderDirect(name, parentId);
     }
 
+    // ----- offlineSingleFile / offlineCard -----
+    async function offlineSingleFile(fileId, parentId, messageUrl) {
+        if (fileId) {
+            await forwardToPikpakBotViaBridge(fileId);
+            return;
+        }
+        throw new Error('该卡片没有 fileId，无法离线到 PikPak（仅支持通过 Bot 转发的视频离线）');
+    }
+    async function offlineCard(card, parentId) {
+        const fIds = (card.fileIds && card.fileIds.length > 0) ? card.fileIds : (card.fileId ? [card.fileId] : []);
+        if (fIds.length > 1) {
+            let ok = 0, fail = 0;
+            for (const fid of fIds) {
+                try {
+                    await offlineSingleFile(fid, parentId, card.messageUrl);
+                    ok++;
+                } catch (e) { fail++; }
+                await new Promise(r => setTimeout(r, 300));
+            }
+            if (fail === 0) showToast(`✅ 已发送 ${ok} 个文件到 PikPak`);
+            else showToast(`✅ ${ok} 个成功, ${fail} 个失败`, fail > 0);
+        } else if (fIds.length === 1) {
+            await offlineSingleFile(fIds[0], parentId, card.messageUrl);
+            showToast('✅ 已发送到 PikPak，任务创建成功！');
+        }
+    }
+
+    // ----- resolveFileViaBridge -----
+    function resolveFileViaBridge(fileId) {
+        return new Promise((resolve, reject) => {
+            const handler = (event) => {
+                if (event.data && event.data.type === 'RESOLVE_FILE_RESULT') {
+                    window.removeEventListener('message', handler);
+                    if (event.data.success && event.data.downloadUrl) {
+                        resolve(event.data.downloadUrl);
+                    } else {
+                        reject(new Error(event.data.error || '解析失败'));
+                    }
+                }
+            };
+            window.addEventListener('message', handler);
+            window.postMessage({ type: 'REQUEST_RESOLVE_FILE', fileId }, '*');
+            setTimeout(() => {
+                window.removeEventListener('message', handler);
+                reject(new Error('扩展未响应'));
+            }, 15000);
+        });
+    }
+
+    // ----- resolveTgVideoViaBridge -----
+    function resolveTgVideoViaBridge(messageUrl) {
+        return new Promise((resolve, reject) => {
+            const handler = (event) => {
+                if (event.data && event.data.type === 'RESOLVE_TG_VIDEO_RESULT') {
+                    window.removeEventListener('message', handler);
+                    if (event.data.success && event.data.videoUrl) {
+                        resolve(event.data.videoUrl);
+                    } else {
+                        reject(new Error(event.data.error || '解析失败'));
+                    }
+                }
+            };
+            window.addEventListener('message', handler);
+            window.postMessage({ type: 'REQUEST_RESOLVE_TG_VIDEO', messageUrl }, '*');
+            setTimeout(() => {
+                window.removeEventListener('message', handler);
+                reject(new Error('扩展未响应'));
+            }, 15000);
+        });
+    }
+
+    // ----- forwardToPikpakBotViaBridge -----
+    function forwardToPikpakBotViaBridge(fileId) {
+        return new Promise((resolve, reject) => {
+            const handler = (event) => {
+                if (event.data && event.data.type === 'FORWARD_TO_PIKPAK_RESULT') {
+                    window.removeEventListener('message', handler);
+                    if (event.data.success) {
+                        resolve();
+                    } else {
+                        reject(new Error(event.data.error || '转发失败'));
+                    }
+                }
+            };
+            window.addEventListener('message', handler);
+            window.postMessage({ type: 'REQUEST_FORWARD_TO_PIKPAK', fileId }, '*');
+            setTimeout(() => {
+                window.removeEventListener('message', handler);
+                reject(new Error('扩展未响应'));
+            }, 30000);
+        });
+    }
+
+    // ----- Telethon 登录桥接 -----
+    function checkTelegramLoginStatusViaBridge() {
+        return new Promise((resolve) => {
+            const handler = (event) => {
+                if (event.data && event.data.type === 'TELEGRAM_LOGIN_STATUS_RESULT') {
+                    window.removeEventListener('message', handler);
+                    resolve(event.data.loggedIn || false);
+                }
+            };
+            window.addEventListener('message', handler);
+            window.postMessage({ type: 'REQUEST_TELEGRAM_LOGIN_STATUS' }, '*');
+            setTimeout(() => { window.removeEventListener('message', handler); resolve(false); }, 5000);
+        });
+    }
+    function telegramSendCodeViaBridge(phoneNumber) {
+        return new Promise((resolve, reject) => {
+            const handler = (event) => {
+                if (event.data && event.data.type === 'TELEGRAM_SEND_CODE_RESULT') {
+                    window.removeEventListener('message', handler);
+                    if (event.data.success) resolve();
+                    else reject(new Error(event.data.error || '发送失败'));
+                }
+            };
+            window.addEventListener('message', handler);
+            window.postMessage({ type: 'REQUEST_TELEGRAM_SEND_CODE', phoneNumber }, '*');
+            setTimeout(() => { window.removeEventListener('message', handler); reject(new Error('超时')); }, 15000);
+        });
+    }
+    function telegramSignInViaBridge(code) {
+        return new Promise((resolve, reject) => {
+            const handler = (event) => {
+                if (event.data && event.data.type === 'TELEGRAM_SIGN_IN_RESULT') {
+                    window.removeEventListener('message', handler);
+                    if (event.data.success) resolve();
+                    else if (event.data.needs2fa) reject(new Error('NEEDS_2FA'));
+                    else reject(new Error(event.data.error || '登录失败'));
+                }
+            };
+            window.addEventListener('message', handler);
+            window.postMessage({ type: 'REQUEST_TELEGRAM_SIGN_IN', code }, '*');
+            setTimeout(() => { window.removeEventListener('message', handler); reject(new Error('超时')); }, 15000);
+        });
+    }
+    function telegram2faViaBridge(password) {
+        return new Promise((resolve, reject) => {
+            const handler = (event) => {
+                if (event.data && event.data.type === 'TELEGRAM_2FA_RESULT') {
+                    window.removeEventListener('message', handler);
+                    if (event.data.success) resolve();
+                    else reject(new Error(event.data.error || '2FA 失败'));
+                }
+            };
+            window.addEventListener('message', handler);
+            window.postMessage({ type: 'REQUEST_TELEGRAM_2FA', password }, '*');
+            setTimeout(() => { window.removeEventListener('message', handler); reject(new Error('超时')); }, 15000);
+        });
+    }
+    function telegramLogoutViaBridge() {
+        return new Promise((resolve, reject) => {
+            const handler = (event) => {
+                if (event.data && event.data.type === 'TELEGRAM_LOGOUT_RESULT') {
+                    window.removeEventListener('message', handler);
+                    if (event.data.success) resolve();
+                    else reject(new Error(event.data.error || '注销失败'));
+                }
+            };
+            window.addEventListener('message', handler);
+            window.postMessage({ type: 'REQUEST_TELEGRAM_LOGOUT' }, '*');
+            setTimeout(() => { window.removeEventListener('message', handler); reject(new Error('超时')); }, 5000);
+        });
+    }
+
     // ----- sendToPikPakViaBridge -----
     function sendToPikPakViaBridge(magnetLink, parentId = '') {
         if (_ppBridgeMode === 'proxy') {
             console.log('[PikPak] 代理模式，直接离线');
             return ppOfflineDirect(magnetLink, parentId);
         }
-        // 扩展模式：桥接重试 3 次
         return new Promise((resolve, reject) => {
-            let attempt = 0;
-            const tryBridge = () => {
-                attempt++;
-                let bridgeDone = false;
-                const safeResolve = (v) => { if (!bridgeDone) { bridgeDone = true; resolve(v); } };
-                const safeReject = (e) => { if (!bridgeDone) { bridgeDone = true; reject(e); } };
-                console.log(`[PikPak桥接] 扩展代理 (第 ${attempt} 次)`);
-                const handler = (event) => {
-                    if (event.data && event.data.type === 'PIKPAK_OFFLINE_RESULT') {
-                        window.removeEventListener('message', handler);
-                        if (event.data.success) {
-                            safeResolve(event.data.data);
-                        } else {
-                            if (event.data.code === 'TOKEN_EXPIRED') {
-                                alert('⚠️ PikPak Token 已过期，请打开 PikPak 页面重新登录，然后刷新管理器页面。');
-                            }
-                            safeReject(new Error(event.data.error));
-                        }
-                    }
-                };
-                window.addEventListener('message', handler);
-                window.postMessage({ type: 'REQUEST_PIKPAK_OFFLINE', magnet: magnetLink, parentId: parentId }, '*');
-                setTimeout(() => {
+            let bridgeDone = false;
+            const safeResolve = (v) => { if (!bridgeDone) { bridgeDone = true; resolve(v); } };
+            const safeReject = (e) => { if (!bridgeDone) { bridgeDone = true; reject(e); } };
+            console.log('[PikPak桥接] 发送离线请求');
+            const handler = (event) => {
+                if (event.data && event.data.type === 'PIKPAK_OFFLINE_RESULT') {
                     window.removeEventListener('message', handler);
-                    if (attempt < 3) {
-                        console.log(`[PikPak桥接] 第 ${attempt} 次超时，重试...`);
-                        tryBridge();
+                    if (event.data.success) {
+                        safeResolve(event.data.data);
                     } else {
-                        safeReject(new Error('扩展未响应'));
+                        if (event.data.code === 'TOKEN_EXPIRED') {
+                            alert('⚠️ PikPak Token 已过期，请打开 PikPak 页面重新登录，然后刷新管理器页面。');
+                        }
+                        safeReject(new Error(event.data.error));
                     }
-                }, 15000);
+                }
             };
-            tryBridge();
+            window.addEventListener('message', handler);
+            window.postMessage({ type: 'REQUEST_PIKPAK_OFFLINE', magnet: magnetLink, parentId: parentId }, '*');
+            setTimeout(() => {
+                window.removeEventListener('message', handler);
+                safeReject(new Error('扩展未响应'));
+            }, 30000);
         });
     }
     function doSend(target, magnetLink, parentId, resolve, reject) { let timeoutId = null; const handler = (event) => { if (event.data && event.data.type === 'OFFLINE_RESULT') { if (timeoutId) clearTimeout(timeoutId); window.removeEventListener('message', handler); if (event.data.success) { resolve(event.data.data); } else { reject(new Error(event.data.error)); } } }; window.addEventListener('message', handler); target.postMessage({ type: 'OFFLINE_TO_PIKPAK', magnet: magnetLink, parentId: parentId }, '*'); timeoutId = setTimeout(() => { window.removeEventListener('message', handler); reject(new Error('桥接超时，请确认油猴桥接脚本已启用')); }, 15000); }
@@ -1724,7 +1882,7 @@ function bindMagnetLinkEvents() {
             });
         });
     }
-function showCardPreview(magnetLink, title, onUpdateBatchItem = null) {
+    function showCardPreview(magnetLink, title, onUpdateBatchItem = null) {
         magnetPreviewWithFallback(magnetLink)
             .then(data => { showPreviewPopup(magnetLink, title, data, onUpdateBatchItem); })
             .catch(err => {
@@ -1736,6 +1894,246 @@ function showCardPreview(magnetLink, title, onUpdateBatchItem = null) {
                     if (onUpdateBatchItem) onUpdateBatchItem('error');
                 }
             });
+    }
+
+    // ===== 视频预览（直链卡片） =====
+    async function showVideoPreview(card, onUpdateBatchItem = null) {
+        async function resolveImg(id) {
+            if (!id) return '';
+            if (id.startsWith('img_')) {
+                const blob = await getImageBlob(id);
+                return blob ? URL.createObjectURL(blob) : '';
+            }
+            return id;
+        }
+
+        const extraImages = card.extraImages || [];
+        const allShotIds = [card.imageUrl, ...extraImages].filter(Boolean);
+        // 预解析所有图片 URL
+        const resolvedUrls = {};
+        for (const id of allShotIds) {
+            resolvedUrls[id] = await resolveImg(id);
+        }
+
+        const heroSrc = resolvedUrls[card.imageUrl] || '';
+
+        const overlay = document.createElement('div');
+        overlay.className = 'card-preview-overlay';
+        overlay.innerHTML = `
+            <div class="card-preview-card">
+                <div class="card-preview-hero">
+                    ${heroSrc ? `<img src="${heroSrc}" alt="" referrerpolicy="no-referrer" onerror="this.parentElement.innerHTML='<div style=\\'color:#888;font-size:14px;\\'>无预览图</div>'">` : '<div style="color:#888;font-size:14px;">无预览图</div>'}
+                    <button class="card-preview-close">✖</button>
+                </div>
+                <div class="card-preview-body">
+                    <div>
+                        <div class="card-preview-title" contenteditable="plaintext-only">${escapeHtml(card.title)}</div>
+                        <div class="card-preview-desc">检测到视频链接${card.messageUrl ? `，<a href="${escapeHtml(card.messageUrl)}" target="_blank" rel="noopener noreferrer" style="color:#306eff;">查看 Telegram 原文</a>` : ''}，选择以下操作：</div>
+                    </div>
+                    ${allShotIds.length > 1 ? `
+                    <div class="card-preview-shots">
+                        ${allShotIds.map((imgId, idx) => {
+                            const src = resolvedUrls[imgId] || '';
+                            return `<div class="card-preview-shot ${idx === 0 ? 'active' : ''}" data-img-id="${escapeHtml(imgId)}">
+                                <img src="${escapeHtml(src)}" alt="" referrerpolicy="no-referrer" onerror="this.style.display='none';">
+                            </div>`;
+                        }).join('')}
+                    </div>
+                    ` : ''}
+                    <div class="card-preview-folder" id="previewFolderSelector">
+                        <span class="card-preview-folder-label">保存到：</span>
+                        <span class="card-preview-folder-name" id="previewFolderName">📁 默认文件夹</span>
+                        <span class="card-preview-folder-arrow" id="previewFolderArrow">▼</span>
+                        <div class="card-preview-folder-dropdown" id="previewFolderDropdown" style="display:none;"></div>
+                    </div>
+                    <div class="card-preview-actions">
+                        <button class="btn-outline" data-action="offline">📥 离线下载</button>
+                        <button class="btn-outline" data-action="save">💾 更新</button>
+                        <button class="btn-primary" data-action="both">⚡ 离线并更新</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+
+        const closeBtn = overlay.querySelector('.card-preview-close');
+        let selectedImageUrl = card.imageUrl;
+        let selectedParentId = '';
+        let selectedFolderName = '📁 默认文件夹';
+        let folderDropdownOpen = false;
+
+        overlay.querySelectorAll('.card-preview-shot').forEach(shot => {
+            shot.addEventListener('click', async () => {
+                const imgId = shot.dataset.imgId;
+                const url = await resolveImg(imgId);
+                const hero = overlay.querySelector('.card-preview-hero img');
+                if (hero && url) {
+                    hero.src = url;
+                    selectedImageUrl = imgId;
+                }
+                overlay.querySelectorAll('.card-preview-shot').forEach(s => s.classList.remove('active'));
+                shot.classList.add('active');
+            });
+        });
+
+        const close = () => { overlay.remove(); };
+        closeBtn.addEventListener('click', close);
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+        // 文件夹选择器（复制 showPreviewPopup 的逻辑）
+        const folderSelector2 = overlay.querySelector('#previewFolderSelector');
+        const folderNameEl = overlay.querySelector('#previewFolderName');
+        const folderArrowEl = overlay.querySelector('#previewFolderArrow');
+        const folderDropdown = overlay.querySelector('#previewFolderDropdown');
+        let folderPath = [];
+
+        function closeFolderDropdown() {
+            folderDropdownOpen = false;
+            folderArrowEl.classList.remove('open');
+            folderDropdown.style.display = 'none';
+        }
+
+        function getCurrentParentId() {
+            return folderPath.length > 0 ? folderPath[folderPath.length - 1].id : '';
+        }
+
+        async function loadAndRenderCurrentLevel() {
+            folderDropdown.innerHTML = '<div class="card-preview-folder-option loading">加载中...</div>';
+            try {
+                const parentId = getCurrentParentId();
+                const folders = await ppLoadFolderChildren(parentId);
+                renderFolderList(folders);
+            } catch (err) {
+                folderDropdown.innerHTML = '<div class="card-preview-folder-option error">加载失败: ' + escapeHtml(err.message) + '</div>';
+            }
+        }
+
+        function renderFolderList(folders) {
+            let html = '';
+            if (folderPath.length > 0) {
+                html += '<div class="card-preview-folder-option back" data-action="back">← 返回上级</div>';
+            }
+            for (const f of folders) {
+                const active = f.id === selectedParentId ? ' active' : '';
+                html += `<div class="card-preview-folder-option${active}" data-id="${f.id}" data-enter="1">📁 ${escapeHtml(f.name)}</div>`;
+            }
+            html += '<div class="card-preview-folder-option create" data-action="create">➕ 新建文件夹</div>';
+            folderDropdown.innerHTML = html;
+
+            const backBtn = folderDropdown.querySelector('[data-action="back"]');
+            if (backBtn) {
+                backBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    folderPath.pop();
+                    loadAndRenderCurrentLevel();
+                });
+            }
+
+            folderDropdown.querySelectorAll('[data-enter="1"]').forEach(opt => {
+                opt.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const id = opt.dataset.id;
+                    const name = opt.textContent.replace('📁', '').trim();
+                    folderPath.push({ id, name });
+                    selectedParentId = id;
+                    selectedFolderName = '📂 ' + folderPath.map(p => p.name).join(' / ');
+                    folderNameEl.textContent = selectedFolderName;
+                    folderDropdown.querySelectorAll('.card-preview-folder-option').forEach(o => o.classList.remove('active'));
+                    opt.classList.add('active');
+                    await loadAndRenderCurrentLevel();
+                });
+            });
+
+            const createOpt = folderDropdown.querySelector('[data-action="create"]');
+            if (createOpt) {
+                createOpt.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const name = prompt('请输入新文件夹名称：');
+                    if (!name || !name.trim()) return;
+                    try {
+                        createOpt.textContent = '创建中...';
+                        const parentId = folderPath.length > 0 ? folderPath[folderPath.length - 1].id : '';
+                        const result = await ppCreateFolder(name.trim(), parentId);
+                        selectedParentId = result.id;
+                        selectedFolderName = '📂 ' + (folderPath.length > 0 ? folderPath.map(p => p.name).join(' / ') + ' / ' : '') + name.trim();
+                        folderNameEl.textContent = selectedFolderName;
+                        await loadAndRenderCurrentLevel();
+                    } catch (err) {
+                        alert('创建文件夹失败: ' + err.message);
+                    }
+                });
+            }
+        }
+
+        folderSelector2.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (!folderDropdownOpen) {
+                folderDropdownOpen = true;
+                folderArrowEl.classList.add('open');
+                folderDropdown.style.display = 'block';
+                if (!folderDropdown.dataset.loaded) {
+                    await loadAndRenderCurrentLevel();
+                    folderDropdown.dataset.loaded = 'true';
+                } else {
+                    loadAndRenderCurrentLevel();
+                }
+            } else {
+                closeFolderDropdown();
+            }
+        });
+
+        document.addEventListener('click', (e) => {
+            if (folderDropdownOpen && !folderSelector2.contains(e.target)) {
+                closeFolderDropdown();
+            }
+        });
+
+        // 操作按钮
+        const buttons = overlay.querySelectorAll('[data-action]');
+        buttons.forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const action = btn.dataset.action;
+                const originalText = btn.textContent;
+                btn.disabled = true;
+                btn.textContent = '处理中...';
+
+                try {
+                    if (action === 'offline' || action === 'both') {
+                        if (card.videoUrl) {
+                            await sendToPikPakViaBridge(card.videoUrl, selectedParentId);
+                        } else {
+                            await offlineCard(card, selectedParentId);
+                        }
+                    }
+
+                    if (action === 'save' || action === 'both') {
+                        const editedTitle = (overlay.querySelector('.card-preview-title').textContent || '').trim() || card.title;
+                        card.title = editedTitle;
+                        if (selectedImageUrl && selectedImageUrl !== card.imageUrl) {
+                            card.imageUrl = selectedImageUrl;
+                        }
+                        await saveToDB();
+                        updateFilteredList();
+                        currentLoadedCount = 0;
+                        await renderLoadedCards();
+                        updateStats(allFilteredMagnets.length, magnets.length);
+                    }
+
+                    if (action === 'offline') {
+                        showToast('✅ 已发送到 PikPak');
+                    } else if (action === 'save') {
+                        showToast('✅ 已更新');
+                    } else {
+                        showToast('✅ 已离线并更新');
+                    }
+                    close();
+                } catch (err) {
+                    showToast('❌ ' + err.message, true);
+                    btn.disabled = false;
+                    btn.textContent = originalText;
+                }
+            });
+        });
     }
 
     // ===== 截图提取 =====
@@ -2790,7 +3188,7 @@ function loginGDrive() {
     // ===== 扩展队列导入 =====
     let autoImportTimer = null;
     function fetchPendingFromExtension() { return new Promise((resolve, reject) => { const handler = (event) => { if (event.data && event.data.type === 'PENDING_MAGNETS_RESULT') { window.removeEventListener('message', handler); if (event.data.success) { resolve({ data: event.data.data, total: event.data.total }); } else { reject(new Error(event.data.error || '获取失败')); } } }; window.addEventListener('message', handler); window.postMessage({ type: 'REQUEST_PENDING_MAGNETS' }, '*'); setTimeout(() => { window.removeEventListener('message', handler); reject(new Error('扩展未响应')); }, 10000); }); }
-    async function importFromExtension() { try { const result = await fetchPendingFromExtension(); if (!result.data || result.data.length === 0) { showToast('扩展队列为空', false); return; } const items = result.data.map(item => ({ title: item.title || '未知', magnetLink: item.magnet, size: item.size || '', imageUrl: item.imageUrl || '' })); const newMagnets = []; for (const src of items) { const title = src.title || ''; const magnetLink = src.magnetLink || ''; const size = src.size || ''; if (magnets.some(m => m.magnetLink.toLowerCase() === magnetLink.toLowerCase())) continue; let finalImageUrl = src.imageUrl || ''; if (finalImageUrl && !finalImageUrl.startsWith('img_') && (finalImageUrl.startsWith('http://') || finalImageUrl.startsWith('https://'))) { try { let blob = null; if (window.__MAGNET_HELPER_EXTENSION__) { try { blob = await fetchImageViaExtension(finalImageUrl); } catch(e) {} } if (!blob) { const response = await fetch(finalImageUrl); if (response.ok) blob = await response.blob(); } if (blob) { const newId = await storeImageBlob(finalImageUrl, blob); if (newId) finalImageUrl = newId; } } catch(err) { console.warn('导入时图片处理失败:', err.message); } } const cleanedTitle = cleanTitle(title); const newMagnet = { id: nextMagnetId++, magnetLink: magnetLink, title: cleanedTitle, imageUrl: finalImageUrl, size: size, tagIds: [], rating: 0, createdAt: Date.now() }; applyAutoTagsToMagnet(newMagnet); newMagnets.push(newMagnet); } if (newMagnets.length === 0) { showToast('没有新的磁力链接（可能均已存在）', true); return; } magnets.push(...newMagnets); await saveToDB(); updateFilteredList(); currentLoadedCount = 0; renderLoadedCards(); updateStats(allFilteredMagnets.length, magnets.length); const clearAfter = document.getElementById('clearAfterImport')?.checked ?? false; if (clearAfter) { try { await new Promise((resolve, reject) => { const handler = (event) => { if (event.data && event.data.type === 'CLEAR_PENDING_MAGNETS_RESULT') { window.removeEventListener('message', handler); if (event.data.success) { resolve(true); } else { reject(new Error(event.data.error || '清空失败')); } } }; window.addEventListener('message', handler); window.postMessage({ type: 'REQUEST_CLEAR_PENDING_MAGNETS' }, '*'); setTimeout(() => { window.removeEventListener('message', handler); reject(new Error('清空请求超时')); }, 5000); }); showToast(`✅ 从扩展成功导入 ${newMagnets.length} 条磁力，已清空队列`); } catch (err) { showToast(`✅ 从扩展成功导入 ${newMagnets.length} 条磁力，但清空队列失败`, true); } } else { showToast(`✅ 从扩展成功导入 ${newMagnets.length} 条磁力（保留队列）`); } } catch (err) { showToast('❌ 从扩展导入失败：' + err.message, true); } }
+    async function importFromExtension() { try { if (window.__MAGNET_HELPER_EXTENSION__) { await new Promise((resolve) => { const handler = (event) => { if (event.data && event.data.type === 'BOT_POLL_COMPLETE') { window.removeEventListener('message', handler); resolve(); } }; window.addEventListener('message', handler); window.postMessage({ type: 'REQUEST_BOT_POLL' }, '*'); setTimeout(() => { window.removeEventListener('message', handler); resolve(); }, 3000); }); } const result = await fetchPendingFromExtension(); if (!result.data || result.data.length === 0) { showToast('扩展队列为空', false); return; } const items = result.data.map(item => ({ title: item.title || '未知', magnetLink: item.magnet || '', videoUrl: item.videoUrl || '', size: item.size || '', imageUrl: item.imageUrl || '', extraImages: item.extraImages || [], messageUrl: item.messageUrl || '', fileId: item.fileId || '', fileIds: item.fileIds || [] })); const newMagnets = []; for (const src of items) { const title = src.title || ''; const magnetLink = src.magnetLink || ''; const videoUrl = src.videoUrl || ''; const size = src.size || ''; const fileId = src.fileId || ''; const fileIds = src.fileIds || []; if (magnetLink && magnets.some(m => m.magnetLink && m.magnetLink.toLowerCase() === magnetLink.toLowerCase())) continue; if (videoUrl && magnets.some(m => m.videoUrl && m.videoUrl.toLowerCase() === videoUrl.toLowerCase())) continue; if (src.messageUrl && magnets.some(m => m.messageUrl && m.messageUrl === src.messageUrl)) continue; let finalImageUrl = src.imageUrl || ''; if (finalImageUrl && !finalImageUrl.startsWith('img_') && (finalImageUrl.startsWith('http://') || finalImageUrl.startsWith('https://'))) { try { let blob = null; if (window.__MAGNET_HELPER_EXTENSION__) { try { blob = await fetchImageViaExtension(finalImageUrl); } catch(e) {} } if (!blob) { const response = await fetch(finalImageUrl); if (response.ok) blob = await response.blob(); } if (blob) { const newId = await storeImageBlob(finalImageUrl, blob); if (newId) finalImageUrl = newId; } } catch(err) { console.warn('导入时图片处理失败:', err.message); } } let extraImageIds = []; for (const extraUrl of (src.extraImages || [])) { try { let blob = null; if (window.__MAGNET_HELPER_EXTENSION__) { try { blob = await fetchImageViaExtension(extraUrl); } catch(e) {} } if (!blob) { const resp = await fetch(extraUrl); if (resp.ok) blob = await resp.blob(); } if (blob) { const newId = await storeImageBlob(extraUrl, blob); if (newId) extraImageIds.push(newId); } } catch(e) { console.warn('额外图片导入失败:', e.message); } } const cleanedTitle = cleanTitle(title); const newMagnet = { id: nextMagnetId++, magnetLink: magnetLink, videoUrl: videoUrl, title: cleanedTitle, imageUrl: finalImageUrl, extraImages: extraImageIds, messageUrl: src.messageUrl || '', fileId: fileId || '', fileIds: fileIds, size: size, tagIds: [], rating: 0, createdAt: Date.now() }; applyAutoTagsToMagnet(newMagnet); newMagnets.push(newMagnet); } if (newMagnets.length === 0) { showToast('没有新的磁力链接（可能均已存在）', true); return; } magnets.push(...newMagnets); await saveToDB(); updateFilteredList(); currentLoadedCount = 0; renderLoadedCards(); updateStats(allFilteredMagnets.length, magnets.length); const clearAfter = document.getElementById('clearAfterImport')?.checked ?? false; if (clearAfter) { try { await new Promise((resolve, reject) => { const handler = (event) => { if (event.data && event.data.type === 'CLEAR_PENDING_MAGNETS_RESULT') { window.removeEventListener('message', handler); if (event.data.success) { resolve(true); } else { reject(new Error(event.data.error || '清空失败')); } } }; window.addEventListener('message', handler); window.postMessage({ type: 'REQUEST_CLEAR_PENDING_MAGNETS' }, '*'); setTimeout(() => { window.removeEventListener('message', handler); reject(new Error('清空请求超时')); }, 5000); }); showToast(`✅ 从扩展成功导入 ${newMagnets.length} 条磁力，已清空队列`); } catch (err) { showToast(`✅ 从扩展成功导入 ${newMagnets.length} 条磁力，但清空队列失败`, true); } } else { showToast(`✅ 从扩展成功导入 ${newMagnets.length} 条磁力（保留队列）`); } } catch (err) { showToast('❌ 从扩展导入失败：' + err.message, true); } }
     function startAutoImport() { const intervalInput = document.getElementById('autoImportInterval'); const minutes = parseFloat(intervalInput.value) || 10; if (minutes < 0.1) { alert('间隔至少 0.1 分钟'); return; } if (autoImportTimer) clearInterval(autoImportTimer); autoImportTimer = setInterval(() => { importFromExtension(); }, minutes * 60 * 1000); const toggleBtn = document.getElementById('autoImportToggleBtn'); if (toggleBtn) { toggleBtn.innerHTML = '<i class="fas fa-pause"></i> 停止'; toggleBtn.style.background = '#ef4444'; } document.getElementById('autoImportStatus').textContent = `⏳ 每 ${minutes} 分钟自动导入`; localStorage.setItem('autoImportRunning', 'true'); localStorage.setItem('autoImportInterval', String(minutes)); showToast(`自动导入已启动，间隔 ${minutes} 分钟`); }
     function stopAutoImport() { if (autoImportTimer) { clearInterval(autoImportTimer); autoImportTimer = null; } const toggleBtn = document.getElementById('autoImportToggleBtn'); if (toggleBtn) { toggleBtn.innerHTML = '<i class="fas fa-play"></i> 启动'; toggleBtn.style.background = '#10b981'; } document.getElementById('autoImportStatus').textContent = '已停止'; localStorage.setItem('autoImportRunning', 'false'); showToast('自动导入已停止'); }
     function toggleAutoImport() { if (autoImportTimer) { stopAutoImport(); } else { startAutoImport(); } }
@@ -3396,11 +3794,15 @@ async function renderLoadedCards() {
             let stars = '';
             for (let i=1;i<=5;i++) stars += `<i class="${i<=m.rating?'fas fa-star active':'far fa-star'}" data-rating="${i}"></i>`;
             const checked = selectedCardIds.has(m.id) ? 'checked' : '';
-            const shortLink = m.magnetLink.length>45 ? m.magnetLink.substring(0,45)+'...' : m.magnetLink;
+            const shortLink = m.magnetLink ? (m.magnetLink.length>45 ? m.magnetLink.substring(0,45)+'...' : m.magnetLink) : (m.videoUrl ? (m.videoUrl.length>45 ? m.videoUrl.substring(0,45)+'...' : m.videoUrl) : (m.messageUrl ? (m.messageUrl.length>45 ? m.messageUrl.substring(0,45)+'...' : m.messageUrl) : ''));
             const isLocal = m.imageUrl && m.imageUrl.startsWith('img_');
-            const badge = isLocal ? '<span class="local-badge" title="图片已保存到本地，永久有效"><i class="fas fa-database"></i> 本地</span>' : (m.imageUrl ? '<span class="net-badge" title="网络图片，可能失效"><i class="fas fa-globe"></i> 网络</span>' : '');
+            const videoCount = (m.fileIds && m.fileIds.length) || (m.fileId ? 1 : 0);
+            const videoBadge = (m.videoUrl || videoCount > 0) ? `<span class="badge-video" style="font-size:0.7rem;background:#7c3aed;color:#fff;padding:1px 6px;border-radius:10px;">🎬 视频${videoCount > 1 ? '×' + videoCount : ''}</span>` : '';
+            const badge = videoBadge || (isLocal ? '<span class="local-badge" title="图片已保存到本地，永久有效"><i class="fas fa-database"></i> 本地</span>' : (m.imageUrl ? '<span class="net-badge" title="网络图片，可能失效"><i class="fas fa-globe"></i> 网络</span>' : ''));
             const imgUrl = m.imageUrl ? (m.imageUrl.startsWith('img_') ? '' : m.imageUrl) : '';
-            return `<div class="magnet-card" data-id="${m.id}"><input type="checkbox" class="card-checkbox" data-id="${m.id}" ${checked}><div class="preview-img" style="background-image: url('${escapeHtml(imgUrl || 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'400\' height=\'200\' viewBox=\'0 0 400 200\'%3E%3Crect width=\'400\' height=\'200\' fill=\'%23e2e8f0\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' font-family=\'Arial\' font-size=\'16\' fill=\'%23475569\' text-anchor=\'middle\' dy=\'.3em\'%3ENo Preview%3C/text%3E%3C/svg%3E')}')" data-img-url="${escapeHtml(imgUrl)}"></div><div class="card-content"><div class="card-title">${escapeHtml(m.title)} ${badge}</div><div class="tag-list">${tagSpans}</div>${m.size?`<div><i class="fas fa-database"></i> ${escapeHtml(m.size)}</div>`:''}<a href="${escapeHtml(m.magnetLink)}" class="magnet-link" data-magnet="${escapeHtml(m.magnetLink)}">🔗 ${escapeHtml(shortLink)}</a><div class="card-actions"><div class="star-rating" data-id="${m.id}">${stars}</div><div><button class="icon-btn copy-magnet" data-magnet="${escapeHtml(m.magnetLink)}" title="复制磁力链接"><i class="fas fa-copy"></i></button><button class="icon-btn preview-card-btn" data-magnet="${escapeHtml(m.magnetLink)}" data-title="${escapeHtml(m.title)}" title="预览磁力"><i class="fas fa-eye"></i> 预览</button><button class="icon-btn edit-magnet" data-id="${m.id}"><i class="fas fa-edit"></i> 编辑</button><button class="icon-btn save-image-btn" data-id="${m.id}" title="保存图片到本地"><i class="fas fa-download"></i> 存本地</button><button class="icon-btn send-pikpak-btn" data-magnet="${escapeHtml(m.magnetLink)}" title="发送到 PikPak 离线下载"><i class="fas fa-cloud-upload-alt"></i> 离线</button><button class="icon-btn delete-magnet" data-id="${m.id}"><i class="fas fa-trash-alt"></i> 删除</button></div></div></div></div>`;
+const magnetLinkEl = m.magnetLink ? `<a href="${escapeHtml(m.magnetLink)}" class="magnet-link" data-magnet="${escapeHtml(m.magnetLink)}">🔗 ${escapeHtml(shortLink)}</a>` : (m.videoUrl ? `<div class="magnet-link" style="font-size:0.75rem;color:var(--text-secondary);word-break:break-all;">🔗 ${escapeHtml(shortLink)}</div>` : (m.messageUrl ? `<a href="${escapeHtml(m.messageUrl)}" class="magnet-link" target="_blank" rel="noopener noreferrer">📨 ${escapeHtml(shortLink)}</a>` : ''));
+            const copyBtn = m.magnetLink ? `<button class="icon-btn copy-magnet" data-magnet="${escapeHtml(m.magnetLink)}" title="复制磁力链接"><i class="fas fa-copy"></i></button>` : '';
+            return `<div class="magnet-card" data-id="${m.id}"><input type="checkbox" class="card-checkbox" data-id="${m.id}" ${checked}><div class="preview-img" style="background-image: url('${escapeHtml(imgUrl || 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'400\' height=\'200\' viewBox=\'0 0 400 200\'%3E%3Crect width=\'400\' height=\'200\' fill=\'%23e2e8f0\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' font-family=\'Arial\' font-size=\'16\' fill=\'%23475569\' text-anchor=\'middle\' dy=\'.3em\'%3ENo Preview%3C/text%3E%3C/svg%3E')}')" data-img-url="${escapeHtml(imgUrl)}"></div><div class="card-content"><div class="card-title">${escapeHtml(m.title)} ${badge}</div><div class="tag-list">${tagSpans}</div>${m.size?`<div><i class="fas fa-database"></i> ${escapeHtml(m.size)}</div>`:''}${magnetLinkEl}<div class="card-actions"><div class="star-rating" data-id="${m.id}">${stars}</div><div>${copyBtn}<button class="icon-btn preview-card-btn" data-id="${m.id}" data-magnet="${escapeHtml(m.magnetLink)}" data-video-url="${escapeHtml(m.videoUrl || '')}" data-file-id="${escapeHtml(m.fileId || '')}" data-file-ids="${escapeHtml(JSON.stringify(m.fileIds || []))}" data-title="${escapeHtml(m.title)}" title="预览"><i class="fas fa-eye"></i> 预览</button><button class="icon-btn edit-magnet" data-id="${m.id}"><i class="fas fa-edit"></i> 编辑</button><button class="icon-btn save-image-btn" data-id="${m.id}" title="保存图片到本地"><i class="fas fa-download"></i> 存本地</button><button class="icon-btn send-pikpak-btn" data-id="${m.id}" data-magnet="${escapeHtml(m.magnetLink)}" data-video-url="${escapeHtml(m.videoUrl || '')}" data-file-id="${escapeHtml(m.fileId || '')}" data-file-ids="${escapeHtml(JSON.stringify(m.fileIds || []))}" title="发送到 PikPak 离线下载"><i class="fas fa-cloud-upload-alt"></i> 离线</button><button class="icon-btn delete-magnet" data-id="${m.id}"><i class="fas fa-trash-alt"></i> 删除</button></div></div></div></div>`;
         }).join('');
 
         // 处理本地图片
@@ -3479,11 +3881,26 @@ async function renderLoadedCards() {
         document.querySelectorAll('.send-pikpak-btn').forEach(btn => {
             btn.addEventListener('click', async (e) => {
                 e.stopPropagation();
+                const id = parseInt(btn.getAttribute('data-id'));
                 const magnet = btn.getAttribute('data-magnet');
-                try {
-                    await sendToPikPakViaBridge(magnet);
-                    showToast('✅ 已发送到 PikPak，任务创建成功！');
-                } catch (err) { showToast('❌ '+err.message, true); }
+                const videoUrl = btn.getAttribute('data-video-url');
+                const url = videoUrl || magnet;
+                if (url) {
+                    try {
+                        await sendToPikPakViaBridge(url);
+                        showToast('✅ 已发送到 PikPak，任务创建成功！');
+                    } catch (err) { showToast('❌ '+err.message, true); }
+                } else {
+                    const card = magnets.find(m => m.id === id);
+                    if (card) {
+                        try {
+                            await offlineCard(card);
+                            showToast('✅ 已发送到 PikPak');
+                        } catch (resolveErr) {
+                            showToast('❌ 离线失败: ' + resolveErr.message, true);
+                        }
+                    }
+                }
             });
         });
 
@@ -3491,8 +3908,15 @@ async function renderLoadedCards() {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const magnet = btn.getAttribute('data-magnet');
+                const videoUrl = btn.getAttribute('data-video-url');
+                const id = parseInt(btn.getAttribute('data-id'));
                 const title = btn.getAttribute('data-title') || '未知资源';
-                showCardPreview(magnet, title);
+                if (magnet) {
+                    showCardPreview(magnet, title);
+                } else {
+                    const card = magnets.find(m => m.id === id);
+                    if (card) showVideoPreview(card);
+                }
             });
         });
 
@@ -3651,7 +4075,6 @@ async function renderLoadedCards() {
 
         dropdown.querySelector('[data-action="back"]')?.addEventListener('click', () => {
             _offlineFolderPath.pop();
-            _offlineSelectedParentId = _offlineFolderPath.length > 0 ? _offlineFolderPath[_offlineFolderPath.length - 1].id : '';
             _offlineRenderSelectedName();
             _offlineLoadAndRenderLevel();
         });
@@ -3674,8 +4097,8 @@ async function renderLoadedCards() {
                 const parentId = _offlineFolderPath.length > 0 ? _offlineFolderPath[_offlineFolderPath.length - 1].id : '';
                 const result = await ppCreateFolder(name.trim(), parentId);
                 _offlineSelectedParentId = result.id;
-                _offlineFolderPath.push({ id: result.id, name: name.trim() });
-                _offlineRenderSelectedName();
+                _offlineSelectedFolderName = '📁 ' + name.trim();
+                document.getElementById('offlineFolderName').textContent = _offlineSelectedFolderName;
                 await _offlineLoadAndRenderLevel();
             } catch (err) {
                 alert('创建文件夹失败: ' + err.message);
@@ -3808,11 +4231,32 @@ async function renderLoadedCards() {
             let success = 0, failed = 0;
             showProgressModal('📥 批量离线到 PikPak...');
             for (let i = 0; i < ids.length; i++) {
-                const magnet = magnets.find(m => m.id === ids[i]);
-                if (!magnet) { failed++; continue; }
+                const m = magnets.find(m => m.id === ids[i]);
+                if (!m) { failed++; continue; }
                 try {
-                    await sendToPikPakViaBridge(magnet.magnetLink, parentId);
-                    success++;
+                    if (m.magnetLink) {
+                        await sendToPikPakViaBridge(m.magnetLink, parentId);
+                        success++;
+                    } else if (m.videoUrl) {
+                        await sendToPikPakViaBridge(m.videoUrl, parentId);
+                        success++;
+                    } else {
+                        const fIds = (m.fileIds && m.fileIds.length > 0) ? m.fileIds : (m.fileId ? [m.fileId] : []);
+                        if (fIds.length > 0) {
+                            let subOk = 0, subFail = 0;
+                            for (const fid of fIds) {
+                                try {
+                                    await forwardToPikpakBotViaBridge(fid);
+                                    subOk++;
+                                } catch (e) { subFail++; }
+                                await new Promise(r => setTimeout(r, 300));
+                            }
+                            if (subFail === 0) success++;
+                            else failed++;
+                        } else {
+                            failed++;
+                        }
+                    }
                 } catch (err) {
                     failed++;
                 }
@@ -3896,11 +4340,9 @@ document.getElementById('gdriveManageBtn').onclick = async () => { await initGDr
             input.addEventListener('change', testProxy);
             document.getElementById('ppSaveProxyBtn').onclick = () => {
                 const val = input.value.trim();
-                if (val) {
-                    localStorage.setItem('pp_cors_proxy', val);
-                    window.postMessage({ type: 'PP_PROXY_UPDATED', proxy: val }, '*');
-                    testProxy();
-                }
+                localStorage.setItem('pp_cors_proxy', val);
+                window.postMessage({ type: 'PP_PROXY_UPDATED', proxy: val }, '*');
+                testProxy();
             };
             // 检测到模态框打开时自动测试
             const observer = new MutationObserver(() => {
@@ -3952,6 +4394,78 @@ document.getElementById('pagePikpakLoginBtn').onclick = () => { ppUpdateLoginUI(
             } catch (err) {
                 statusEl.textContent = '❌ ' + err.message;
                 statusEl.style.color = '#ef4444';
+            }
+        };
+
+        // ===== Telegram 登录 =====
+        document.getElementById('telegramLoginBtn').onclick = async () => {
+            document.getElementById('tgStepPhone').style.display = 'flex';
+            document.getElementById('tgStepCode').style.display = 'none';
+            document.getElementById('tgStep2fa').style.display = 'none';
+            document.getElementById('tgLoginStatus').textContent = '';
+            document.getElementById('tgPhoneInput').value = '';
+            document.getElementById('tgCodeInput').value = '';
+            document.getElementById('tg2faInput').value = '';
+            document.getElementById('telegramLoginModal').style.display = 'flex';
+            // 检查登录状态
+            try {
+                const ok = await checkTelegramLoginStatusViaBridge();
+                if (ok) {
+                    document.getElementById('tgLoginStatus').textContent = '✅ 已登录';
+                    document.getElementById('tgLoginStatus').style.color = '#28a745';
+                    document.getElementById('tgSendCodeBtn').disabled = true;
+                    document.getElementById('tgSignInBtn').disabled = true;
+                }
+            } catch {}
+        };
+        document.getElementById('closeTelegramLoginModalBtn').onclick = () => document.getElementById('telegramLoginModal').style.display = 'none';
+        document.getElementById('telegramLoginModal').onclick = (e) => { if (e.target === e.currentTarget) document.getElementById('telegramLoginModal').style.display = 'none'; };
+        document.getElementById('tgSendCodeBtn').onclick = async () => {
+            const phone = document.getElementById('tgPhoneInput').value.trim();
+            if (!phone) { showToast('请输入手机号', true); return; }
+            const status = document.getElementById('tgLoginStatus');
+            status.textContent = '⏳ 发送验证码...'; status.style.color = '#306eff';
+            try {
+                await telegramSendCodeViaBridge(phone);
+                status.textContent = '✅ 验证码已发送，请检查 Telegram'; status.style.color = '#28a745';
+                document.getElementById('tgStepPhone').style.display = 'none';
+                document.getElementById('tgStepCode').style.display = 'flex';
+            } catch (err) {
+                status.textContent = '❌ ' + err.message; status.style.color = '#ef4444';
+            }
+        };
+        document.getElementById('tgSignInBtn').onclick = async () => {
+            const code = document.getElementById('tgCodeInput').value.trim();
+            if (!code) { showToast('请输入验证码', true); return; }
+            const status = document.getElementById('tgLoginStatus');
+            status.textContent = '⏳ 登录中...'; status.style.color = '#306eff';
+            try {
+                await telegramSignInViaBridge(code);
+                status.textContent = '✅ 登录成功'; status.style.color = '#28a745';
+                showToast('✅ Telegram 登录成功');
+                document.getElementById('telegramLoginModal').style.display = 'none';
+            } catch (err) {
+                if (err.message === 'NEEDS_2FA') {
+                    document.getElementById('tgStepCode').style.display = 'none';
+                    document.getElementById('tgStep2fa').style.display = 'flex';
+                    status.textContent = '请输入两步验证密码'; status.style.color = '#306eff';
+                } else {
+                    status.textContent = '❌ ' + err.message; status.style.color = '#ef4444';
+                }
+            }
+        };
+        document.getElementById('tg2faBtn').onclick = async () => {
+            const password = document.getElementById('tg2faInput').value.trim();
+            if (!password) { showToast('请输入密码', true); return; }
+            const status = document.getElementById('tgLoginStatus');
+            status.textContent = '⏳ 验证中...'; status.style.color = '#306eff';
+            try {
+                await telegram2faViaBridge(password);
+                status.textContent = '✅ 登录成功'; status.style.color = '#28a745';
+                showToast('✅ Telegram 登录成功');
+                document.getElementById('telegramLoginModal').style.display = 'none';
+            } catch (err) {
+                status.textContent = '❌ ' + err.message; status.style.color = '#ef4444';
             }
         };
 

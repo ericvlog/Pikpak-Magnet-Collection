@@ -825,9 +825,43 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'clearPendingMagnets') {
         (async () => {
             try {
+                const cfg = await chrome.storage.local.get(['botPort', 'pendingMagnets']);
+                const port = cfg.botPort || 19876;
+                const items = cfg.pendingMagnets || [];
+                console.log(`[后台] clearPendingMagnets: ${items.length} 条待处理`);
+                if (items.length > 0) {
+                    let botItems = [];
+                    try {
+                        const resp = await fetch(`http://localhost:${port}/api/pending`);
+                        if (resp.ok) botItems = await resp.json();
+                        console.log(`[后台] clearPendingMagnets: Bot 当前 ${botItems.length} 条`);
+                    } catch (e) { console.warn('[后台] clearPendingMagnets: 获取 Bot 列表失败', e.message); }
+                    for (const item of items) {
+                        let botId = item.botPendingId;
+                        console.log(`[后台] clearPendingMagnets: item.botPendingId=${botId}, messageUrl=${item.messageUrl?.substring(0, 30)}`);
+                        if (!botId) {
+                            const match = botItems.find(b =>
+                                (item.messageUrl && b.messageUrl === item.messageUrl) ||
+                                (item.magnet && b.url === item.magnet) ||
+                                (item.videoUrl && b.url === item.videoUrl)
+                            );
+                            if (match) { botId = match.id; console.log('[后台] clearPendingMagnets: 按 URL 匹配到 Bot ID', botId); }
+                        }
+                        if (botId) {
+                            try {
+                                const delResp = await fetch(`http://localhost:${port}/api/pending/${botId}`, { method: 'DELETE' });
+                                console.log(`[后台] clearPendingMagnets: DELETE ${botId} → ${delResp.status}`);
+                            } catch (e) { console.warn('[后台] clearPendingMagnets: DELETE 失败', e.message); }
+                        } else {
+                            console.warn('[后台] clearPendingMagnets: 找不到 botId，跳过');
+                        }
+                    }
+                }
                 await chrome.storage.local.remove('pendingMagnets');
+                console.log('[后台] clearPendingMagnets: 完成');
                 sendResponse({ success: true });
             } catch (err) {
+                console.error('[后台] clearPendingMagnets 异常:', err);
                 sendResponse({ success: false, error: err.message });
             }
         })();
@@ -837,20 +871,29 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'saveMagnet') {
         (async () => {
             try {
-                const { magnet, title, size, imageUrl } = request;
-                if (!magnet) throw new Error('磁力链接不能为空');
+                const { magnet, videoUrl, title, size, imageUrl, extraImages, messageUrl, fileId, fileIds } = request;
+                if (!magnet && !videoUrl) throw new Error('链接不能为空');
                 const result = await chrome.storage.local.get(['pendingMagnets']);
                 const pending = result.pendingMagnets || [];
-                if (pending.some(item => item.magnet === magnet)) {
+                if (magnet && pending.some(item => item.magnet === magnet)) {
                     throw new Error('该磁力已在待保存队列中');
                 }
-                pending.push({
-                    magnet,
+                if (videoUrl && pending.some(item => item.videoUrl === videoUrl)) {
+                    throw new Error('该视频链接已在待保存队列中');
+                }
+                const entry = {
                     title: title || '未知标题',
                     size: size || '',
                     imageUrl: imageUrl || '',
+                    extraImages: extraImages || [],
+                    messageUrl: messageUrl || '',
+                    fileId: fileId || '',
+                    fileIds: fileIds || [],
                     timestamp: Date.now()
-                });
+                };
+                if (magnet) entry.magnet = magnet;
+                if (videoUrl) entry.videoUrl = videoUrl;
+                pending.push(entry);
                 while (pending.length > 50) pending.shift();
                 await chrome.storage.local.set({ pendingMagnets: pending });
                 sendResponse({ success: true });
@@ -1259,6 +1302,242 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 safeSend({ success: true, data: data });
             } catch (error) {
                 safeSend({ success: false, error: error.message });
+            }
+        })();
+        return true;
+    }
+
+    // ===== Bot 队列拉取 =====
+    if (request.action === 'pollBotPending') {
+        (async () => {
+            try {
+                const cfg = await chrome.storage.local.get(['botPort']);
+                const port = cfg.botPort || 19876;
+                const resp = await fetch(`http://localhost:${port}/api/pending`);
+                if (!resp.ok) {
+                    sendResponse({ success: false, error: `HTTP ${resp.status}` });
+                    return;
+                }
+                const items = await resp.json();
+                for (const item of items) {
+                    const pending = await new Promise((resolve) => {
+                        chrome.storage.local.get('pendingMagnets', (result) => {
+                            if (chrome.runtime.lastError) { resolve([]); return; }
+                            resolve(result.pendingMagnets || []);
+                        });
+                    });
+                    // 去重：按 botPendingId / messageUrl / magnet / videoUrl 判断
+                    if (pending.some(e =>
+                        e.botPendingId === item.id ||
+                        (item.messageUrl && e.messageUrl === item.messageUrl) ||
+                        (item.type === 'magnet' && e.magnet === item.url)
+                    )) continue;
+                    const entry = {
+                        botPendingId: item.id,
+                        title: item.title || '未知资源',
+                        imageUrl: item.imageUrl || '',
+                        extraImages: item.extraImages || [],
+                        messageUrl: item.messageUrl || '',
+                        fileId: item.fileId || '',
+                        fileIds: item.fileIds || [],
+                        timestamp: item.timestamp || Date.now()
+                    };
+                    if (item.type === 'magnet') {
+                        entry.magnet = item.url;
+                    } else {
+                        entry.videoUrl = item.url;
+                    }
+                    pending.push(entry);
+                    while (pending.length > 50) pending.shift();
+                    await new Promise((resolve) => {
+                        chrome.storage.local.set({ pendingMagnets: pending }, () => {
+                            if (chrome.runtime.lastError) { resolve(); }
+                            resolve();
+                        });
+                    });
+                }
+                console.log('[后台] pollBotPending: 拉取到', items.length, '条');
+                sendResponse({ success: true, count: items.length });
+            } catch (err) {
+                console.error('[后台] Bot 队列拉取失败:', err);
+                sendResponse({ success: false, error: err.message });
+            }
+        })();
+        return true;
+    }
+
+    // ===== 解析 fileId 为下载 URL =====
+    if (request.action === 'resolveFile') {
+        console.log('[后台] resolveFile:', request.fileId?.substring(0, 20) + '...');
+        (async () => {
+            try {
+                const cfg = await chrome.storage.local.get(['botPort']);
+                const port = cfg.botPort || 19876;
+                const resp = await fetch(`http://localhost:${port}/api/resolve-file/${encodeURIComponent(request.fileId)}`);
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const data = await resp.json();
+                if (data.success) {
+                    console.log('[后台] resolveFile 成功, downloadUrl:', data.downloadUrl?.substring(0, 50) + '...');
+                    sendResponse({ success: true, downloadUrl: data.downloadUrl });
+                } else {
+                    console.warn('[后台] resolveFile Bot 返回错误:', data.error);
+                    sendResponse({ success: false, error: data.error });
+                }
+            } catch (err) {
+                console.error('[后台] resolveFile 失败:', err.message);
+                sendResponse({ success: false, error: err.message });
+            }
+        })();
+        return true;
+    }
+
+    // ===== 转发到 @PikPakBot =====
+    if (request.action === 'forwardToPikpakBot') {
+        console.log('[后台] forwardToPikpakBot:', request.fileId?.substring(0, 20) + '...');
+        (async () => {
+            try {
+                const cfg = await chrome.storage.local.get(['botPort']);
+                const port = cfg.botPort || 19876;
+                const resp = await fetch(`http://localhost:${port}/api/forward-to-pikpak/${encodeURIComponent(request.fileId)}`, { method: 'POST' });
+                const data = await resp.json();
+                sendResponse({ success: data.success, error: data.error });
+            } catch (err) {
+                console.error('[后台] forwardToPikpakBot 失败:', err.message);
+                sendResponse({ success: false, error: err.message });
+            }
+        })();
+        return true;
+    }
+
+    // ===== Telethon 登录 =====
+    if (request.action === 'telegramLoginStatus') {
+        (async () => {
+            try {
+                const cfg = await chrome.storage.local.get(['botPort']);
+                const port = cfg.botPort || 19876;
+                const resp = await fetch(`http://localhost:${port}/api/telethon/status`);
+                const data = await resp.json();
+                sendResponse({ loggedIn: data.loggedIn });
+            } catch (err) {
+                sendResponse({ loggedIn: false, error: err.message });
+            }
+        })();
+        return true;
+    }
+    if (request.action === 'telegramSendCode') {
+        (async () => {
+            try {
+                const cfg = await chrome.storage.local.get(['botPort']);
+                const port = cfg.botPort || 19876;
+                const resp = await fetch(`http://localhost:${port}/api/telethon/send-code`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phoneNumber: request.phoneNumber }),
+                });
+                const data = await resp.json();
+                sendResponse({ success: data.success, error: data.error });
+            } catch (err) {
+                sendResponse({ success: false, error: err.message });
+            }
+        })();
+        return true;
+    }
+    if (request.action === 'telegramSignIn') {
+        (async () => {
+            try {
+                const cfg = await chrome.storage.local.get(['botPort']);
+                const port = cfg.botPort || 19876;
+                const resp = await fetch(`http://localhost:${port}/api/telethon/sign-in`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code: request.code }),
+                });
+                const data = await resp.json();
+                sendResponse({ success: data.success, error: data.error, needs2fa: data.needs2fa });
+            } catch (err) {
+                sendResponse({ success: false, error: err.message });
+            }
+        })();
+        return true;
+    }
+    if (request.action === 'telegram2fa') {
+        (async () => {
+            try {
+                const cfg = await chrome.storage.local.get(['botPort']);
+                const port = cfg.botPort || 19876;
+                const resp = await fetch(`http://localhost:${port}/api/telethon/2fa`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: request.password }),
+                });
+                const data = await resp.json();
+                sendResponse({ success: data.success, error: data.error });
+            } catch (err) {
+                sendResponse({ success: false, error: err.message });
+            }
+        })();
+        return true;
+    }
+    if (request.action === 'telegramLogout') {
+        (async () => {
+            try {
+                const cfg = await chrome.storage.local.get(['botPort']);
+                const port = cfg.botPort || 19876;
+                const resp = await fetch(`http://localhost:${port}/api/telethon/logout`, { method: 'POST' });
+                const data = await resp.json();
+                sendResponse({ success: data.success, error: data.error });
+            } catch (err) {
+                sendResponse({ success: false, error: err.message });
+            }
+        })();
+        return true;
+    }
+
+    // ===== 解析 t.me 视频链接 =====
+    if (request.action === 'resolveTgVideo') {
+        const messageUrl = request.messageUrl;
+        console.log('[后台] resolveTgVideo:', messageUrl);
+        (async () => {
+            try {
+                const resp = await fetch(messageUrl, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+                    }
+                });
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const html = await resp.text();
+                console.log('[后台] resolveTgVideo: 页面大小', html.length, 'bytes');
+
+                // 尝试从 HTML 提取视频源
+                let videoUrl = '';
+                const tagMatch = html.match(/<video[^>]+src=["']([^"']+)["']/i);
+                if (tagMatch) videoUrl = tagMatch[1];
+                console.log('[后台] resolveTgVideo: 标签匹配结果:', videoUrl ? '找到' : '未找到');
+
+                // 如果没有 video 标签，尝试 JSON-LD 中的 contentUrl
+                if (!videoUrl) {
+                    const jsonLdMatch = html.match(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([^<]+)<\/script>/i);
+                    if (jsonLdMatch) {
+                        try {
+                            const ld = JSON.parse(jsonLdMatch[1]);
+                            if (ld?.video?.contentUrl) videoUrl = ld.video.contentUrl;
+                        } catch (e) {}
+                    }
+                    console.log('[后台] resolveTgVideo: JSON-LD 匹配结果:', videoUrl ? '找到' : '未找到');
+                }
+
+                if (videoUrl) {
+                    console.log('[后台] resolveTgVideo 成功, videoUrl:', videoUrl.substring(0, 60) + '...');
+                    sendResponse({ success: true, videoUrl });
+                } else {
+                    console.warn('[后台] resolveTgVideo: 未找到视频链接');
+                    sendResponse({ success: false, error: '未在页面中找到视频链接' });
+                }
+            } catch (err) {
+                console.error('[后台] resolveTgVideo 失败:', err.message);
+                sendResponse({ success: false, error: '解析失败: ' + err.message });
             }
         })();
         return true;

@@ -344,11 +344,35 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // ===== 9. 初始化 =====
+    // ===== 9. Telegram Bot 配置 =====
+    const botPort = document.getElementById('botPort');
+    const botUserId = document.getElementById('botUserId');
+    const botSaveBtn = document.getElementById('botSaveBtn');
+    const botStatusEl = document.getElementById('botStatus');
+
+    async function loadBotConfig() {
+        const result = await new Promise(resolve => chrome.storage.local.get(['botPort', 'botUserId'], resolve));
+        if (result.botPort) botPort.value = result.botPort;
+        if (result.botUserId) botUserId.value = result.botUserId;
+    }
+
+    if (botSaveBtn) {
+        botSaveBtn.addEventListener('click', async () => {
+            const port = parseInt(botPort.value) || 19876;
+            const userId = botUserId.value.trim();
+            await chrome.storage.local.set({ botPort: port, botUserId: userId });
+            botStatusEl.textContent = '✅ 已保存';
+            botStatusEl.style.color = '#28a745';
+            setTimeout(() => { botStatusEl.textContent = ''; }, 3000);
+        });
+    }
+
+    // ===== 10. 初始化 =====
     loadList();
     loadPendingMagnets();
     loadTokenStatus();
     loadLoginStatus();
+    loadBotConfig();
 
     console.log('[选项页] 初始化完成');
 });

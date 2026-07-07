@@ -22,7 +22,8 @@ function sendMessageToBackground(message, callback) {
             if (chrome.runtime.lastError) {
                 const errMsg = chrome.runtime.lastError.message;
                 if (errMsg.includes('Extension context invalidated') ||
-                    errMsg.includes('message port closed')) {
+                    errMsg.includes('message port closed') ||
+                    errMsg.includes('channel closed before a response')) {
                     if (callback) callback(null);
                     return;
                 }
@@ -313,4 +314,76 @@ window.addEventListener('message', (event) => {
             window.postMessage({ type: 'CONNECTION_TEST_RESULT', success: response?.success || false, data: response?.data || [], error: response?.error }, '*');
         });
     }
+
+    // --- 解析 fileId 为下载 URL ---
+    if (event.data.type === 'REQUEST_RESOLVE_FILE') {
+        const fileId = event.data.fileId;
+        sendMessageToBackground({ action: 'resolveFile', fileId }, (response) => {
+            window.postMessage({ type: 'RESOLVE_FILE_RESULT', success: response?.success || false, downloadUrl: response?.downloadUrl || '', error: response?.error || '' }, '*');
+        });
+    }
+
+    // --- 解析 t.me 视频链接 ---
+    if (event.data.type === 'REQUEST_RESOLVE_TG_VIDEO') {
+        const messageUrl = event.data.messageUrl;
+        sendMessageToBackground({ action: 'resolveTgVideo', messageUrl }, (response) => {
+            window.postMessage({ type: 'RESOLVE_TG_VIDEO_RESULT', success: response?.success || false, videoUrl: response?.videoUrl || '', error: response?.error || '' }, '*');
+        });
+    }
+
+    // --- 转发到 @PikPakBot ---
+    if (event.data.type === 'REQUEST_FORWARD_TO_PIKPAK') {
+        const fileId = event.data.fileId;
+        sendMessageToBackground({ action: 'forwardToPikpakBot', fileId }, (response) => {
+            window.postMessage({ type: 'FORWARD_TO_PIKPAK_RESULT', success: response?.success || false, error: response?.error || '' }, '*');
+        });
+    }
+
+    // --- Telethon 登录 ---
+    if (event.data.type === 'REQUEST_TELEGRAM_LOGIN_STATUS') {
+        sendMessageToBackground({ action: 'telegramLoginStatus' }, (response) => {
+            window.postMessage({ type: 'TELEGRAM_LOGIN_STATUS_RESULT', loggedIn: response?.loggedIn || false, error: response?.error || '' }, '*');
+        });
+    }
+    if (event.data.type === 'REQUEST_TELEGRAM_SEND_CODE') {
+        const phoneNumber = event.data.phoneNumber;
+        sendMessageToBackground({ action: 'telegramSendCode', phoneNumber }, (response) => {
+            window.postMessage({ type: 'TELEGRAM_SEND_CODE_RESULT', success: response?.success || false, error: response?.error || '' }, '*');
+        });
+    }
+    if (event.data.type === 'REQUEST_TELEGRAM_SIGN_IN') {
+        const code = event.data.code;
+        sendMessageToBackground({ action: 'telegramSignIn', code }, (response) => {
+            window.postMessage({ type: 'TELEGRAM_SIGN_IN_RESULT', success: response?.success || false, error: response?.error || '', needs2fa: response?.needs2fa || false }, '*');
+        });
+    }
+    if (event.data.type === 'REQUEST_TELEGRAM_2FA') {
+        const password = event.data.password;
+        sendMessageToBackground({ action: 'telegram2fa', password }, (response) => {
+            window.postMessage({ type: 'TELEGRAM_2FA_RESULT', success: response?.success || false, error: response?.error || '' }, '*');
+        });
+    }
+    if (event.data.type === 'REQUEST_TELEGRAM_LOGOUT') {
+        sendMessageToBackground({ action: 'telegramLogout' }, (response) => {
+            window.postMessage({ type: 'TELEGRAM_LOGOUT_RESULT', success: response?.success || false, error: response?.error || '' }, '*');
+        });
+    }
+
+    // --- 触发 Bot 队列检查（由页面 autoImport 驱动） ---
+    if (event.data.type === 'REQUEST_BOT_POLL') {
+        pollBotPendingItems().then(() => {
+            window.postMessage({ type: 'BOT_POLL_COMPLETE' }, '*');
+        });
+    }
 });
+
+// ===== Telegram Bot 触发（由页面 autoImport 驱动，不定时） =====
+async function pollBotPendingItems() {
+    return new Promise((resolve) => {
+        const timeoutId = setTimeout(() => resolve(false), 10000);
+        sendMessageToBackground({ action: 'pollBotPending' }, (response) => {
+            clearTimeout(timeoutId);
+            resolve(response?.success || false);
+        });
+    });
+}

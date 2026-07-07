@@ -1,0 +1,807 @@
+const path = require('path');
+const envPath = path.join(__dirname, '.env');
+require('dotenv').config({ path: envPath });
+console.log('[启动] .env 路径:', envPath);
+console.log('[启动] API_ID:', process.env.API_ID ? '已设置(' + process.env.API_ID + ')' : '未设置');
+console.log('[启动] API_HASH:', process.env.API_HASH ? '已设置' : '未设置');
+console.log('[启动] BOT_TOKEN:', process.env.BOT_TOKEN ? '已设置' : '未设置');
+
+const { Bot, Filter } = require('grammy');
+const express = require('express');
+const { v4: uuidv4 } = require('uuid');
+const fs = require('fs');
+const { TelegramClient, Api } = require('telegram');
+const { StringSession } = require('telegram/sessions');
+const { computeCheck } = require('telegram/Password');
+
+// ===== 配置 =====
+const PORT = parseInt(process.env.PORT) || 19876;
+const BOT_TOKEN = process.env.BOT_TOKEN;
+let BOT_USERNAME = process.env.BOT_USERNAME || '';
+const ALLOWED_USER_ID = process.env.ALLOWED_USER_ID ? String(process.env.ALLOWED_USER_ID).trim() : '';
+const API_ID = parseInt(process.env.API_ID) || 0;
+const API_HASH = process.env.API_HASH || '';
+const PENDING_FILE = path.join(__dirname, 'pending.json');
+const IMAGES_DIR = path.join(__dirname, 'images');
+const TARGET_BOT = process.env.TARGET_BOT_USERNAME || '@PikPak_Bot';
+
+if (!BOT_TOKEN) {
+    console.error('❌ 缺少 BOT_TOKEN，请在 .env 中设置');
+    process.exit(1);
+}
+
+if (!fs.existsSync(IMAGES_DIR)) fs.mkdirSync(IMAGES_DIR, { recursive: true });
+cleanupOrphanImages();
+
+// ===== Telethon 用户客户端（用于转发消息到 @PikPakBot） =====
+let userClient = null;
+let userClientPromise = null;
+let pendingPhoneCode = null;
+const FILE_MAP_FILE = path.join(__dirname, 'fileMap.json');
+const USER_SESSION_FILE = path.join(__dirname, '.user_session');
+
+function loadFileMap() {
+    try {
+        if (!fs.existsSync(FILE_MAP_FILE)) return {};
+        return JSON.parse(fs.readFileSync(FILE_MAP_FILE, 'utf-8'));
+    } catch { return {}; }
+}
+
+function saveFileMap(map) {
+    fs.writeFileSync(FILE_MAP_FILE, JSON.stringify(map, null, 2), 'utf-8');
+}
+
+// seqCounter: 用于相册多文件的时间戳消歧（递增序号）
+let seqCounter = 0;
+
+function addFileMapping(fileId, chatId, messageId) {
+    const map = loadFileMap();
+    // tsOrder = 时间戳 + 序号（精确到微秒级别，同一毫秒内的多个文件通过序号区分）
+    const tsOrder = Date.now() + '.' + (seqCounter++);
+    map[fileId] = { chatId, messageId, tsOrder };
+    saveFileMap(map);
+}
+
+// 从 fileMap 条目找到正确的 MTProto 消息
+async function findMtprotoMessage(fileId, entry) {
+    const client = await getUserClient();
+    if (!client) throw new Error('用户未登录');
+    if (!client.connected) await client.connect();
+    if (!(await client.checkAuthorization())) throw new Error('session 已过期');
+
+    const botPeer = await client.getInputEntity(BOT_USERNAME);
+    const recent = await client.getMessages(botPeer, { limit: 200 });
+    // 只保留 document 类消息（video/document），排除 photo
+    const docMsgs = recent.filter(m => m.media && m.media.document).sort((a, b) => a.id - b.id);
+
+    // 优先使用已缓存的 mtprotoId
+    if (entry.mtprotoId) {
+        const cached = docMsgs.find(m => m.id === entry.mtprotoId);
+        if (cached) { console.log(`[查找] 缓存命中: MTProto ID=${cached.id}`); return cached; }
+    }
+
+    if (entry.tsOrder) {
+        const dotIdx = entry.tsOrder.indexOf('.');
+        const tsPart = dotIdx > 0 ? parseFloat(entry.tsOrder.substring(0, dotIdx)) : parseFloat(entry.tsOrder);
+        const seqPart = dotIdx > 0 ? parseInt(entry.tsOrder.substring(dotIdx + 1), 10) : 0;
+        if (!isNaN(tsPart)) {
+            const windowMsgs = docMsgs.filter(m => Math.abs(m.date * 1000 - tsPart) < 5000);
+            if (windowMsgs.length > 0) {
+                const idx = Math.min(seqPart, windowMsgs.length - 1);
+                const msg = windowMsgs[idx];
+                console.log(`[查找] tsOrder 匹配: seq=${seqPart} window=${windowMsgs.length} → MTProto ID=${msg.id}`);
+                const map = loadFileMap();
+                if (map[fileId]) { map[fileId].mtprotoId = msg.id; saveFileMap(map); }
+                return msg;
+            }
+        }
+    }
+
+    // 降级：无 tsOrder 的旧记录 → 按 messageId 顺序在 docMsgs 中定位
+    // 获取所有 fileMap 条目（排除已匹配的）
+    const allMap = loadFileMap();
+    const pendingEntries = Object.entries(allMap)
+        .filter(([k, v]) => !v.mtprotoId && v.messageId)
+        .sort((a, b) => a[1].messageId - b[1].messageId); // Bot API msgId 升序
+
+    // 如果 docMsgs 数量 ≥ pendingEntries 数量，按顺序一一对应
+    // pendingEntries[0] → docMsgs[docMsgs.length - pendingEntries.length + 0]
+    // pendingEntries[N] → docMsgs[docMsgs.length - pendingEntries.length + N]
+    if (pendingEntries.length > 0 && pendingEntries.length <= docMsgs.length) {
+        for (let i = 0; i < pendingEntries.length; i++) {
+            const [fid, ent] = pendingEntries[i];
+            const msgIdx = docMsgs.length - pendingEntries.length + i;
+            const msg = docMsgs[msgIdx];
+            const map2 = loadFileMap();
+            if (map2[fid]) {
+                map2[fid].mtprotoId = msg.id;
+                if (fid === fileId) {
+                    console.log(`[查找] 位置匹配: msgIdx=${msgIdx} pendingIdx=${i} total=${pendingEntries.length} docMsgs=${docMsgs.length} → MTProto ID=${msg.id}`);
+                    saveFileMap(map2);
+                    return msg;
+                }
+            }
+            saveFileMap(map2);
+        }
+    }
+
+    // 终极降级：取最新一条 document
+    const fallback = docMsgs[docMsgs.length - 1];
+    if (fallback) {
+        console.log(`[查找] 终极降级取最新: MTProto ID=${fallback.id}`);
+        const map3 = loadFileMap();
+        if (map3[fileId]) { map3[fileId].mtprotoId = fallback.id; saveFileMap(map3); }
+        return fallback;
+    }
+
+    throw new Error('未找到匹配的消息');
+}
+
+async function getUserClient() {
+    if (userClient && userClient.connected) return userClient;
+    if (userClientPromise) return userClientPromise;
+
+    userClientPromise = (async () => {
+        if (!API_ID || !API_HASH) {
+            console.warn('[用户] 未配置 API_ID/API_HASH，转发功能不可用');
+            return null;
+        }
+        let session = new StringSession('');
+        if (fs.existsSync(USER_SESSION_FILE)) {
+            try {
+                const saved = fs.readFileSync(USER_SESSION_FILE, 'utf-8').trim();
+                if (saved) session = new StringSession(saved);
+            } catch {}
+        }
+        const client = new TelegramClient(session, API_ID, API_HASH, {
+            connectionRetries: 5,
+            useWSS: false,
+        });
+        await client.connect();
+        if (await client.checkAuthorization()) {
+            console.log('[用户] 已登录（session 有效）');
+            userClient = client;
+            return client;
+        }
+        console.log('[用户] session 无效或未登录');
+        // 保存 client 引用但不标记为已登录
+        userClient = client;
+        return client;
+    })();
+
+    return userClientPromise;
+}
+
+function saveUserSession(client) {
+    const str = client.session.save();
+    fs.writeFileSync(USER_SESSION_FILE, str, 'utf-8');
+    console.log('[用户] session 已保存');
+}
+
+// ===== 队列持久化 =====
+function loadPending() {
+    try {
+        if (!fs.existsSync(PENDING_FILE)) return [];
+        return JSON.parse(fs.readFileSync(PENDING_FILE, 'utf-8'));
+    } catch { return []; }
+}
+
+function savePending(items) {
+    fs.writeFileSync(PENDING_FILE, JSON.stringify(items, null, 2), 'utf-8');
+}
+
+function addPending(item) {
+    const items = loadPending();
+    items.push({ id: uuidv4(), ...item, timestamp: Date.now() });
+    while (items.length > 50) items.shift();
+    savePending(items);
+}
+
+function removePending(id) {
+    const items = loadPending();
+    const item = items.find(i => i.id === id);
+    if (item) {
+        const urls = [item.imageUrl, ...(item.extraImages || [])].filter(Boolean);
+        console.log(`[removePending] 找到条目, imageUrl="${item.imageUrl}", extraImages=${item.extraImages?.length || 0}张, 待处理URL数=${urls.length}`);
+        for (const url of urls) {
+            try {
+                const filename = path.basename(new URL(url).pathname);
+                const filePath = path.join(IMAGES_DIR, filename);
+                console.log(`[removePending] 处理URL: ${url.substring(0, 60)}... → filename=${filename}, filePath=${filePath}, exists=${fs.existsSync(filePath)}`);
+                if (fs.existsSync(filePath)) {
+                    fs.unlinkSync(filePath);
+                    console.log(`[removePending] 已删除: ${filename}`);
+                }
+            } catch (e) {
+                console.warn(`[removePending] 删除失败: ${e.message}`);
+            }
+        }
+    } else {
+        console.warn(`[removePending] 未找到条目: ${id}`);
+    }
+    savePending(items.filter(i => i.id !== id));
+    console.log(`[removePending] 完成, 剩余 ${loadPending().length} 条`);
+}
+
+function cleanupOrphanImages() {
+    const items = loadPending();
+    const referenced = new Set();
+    for (const item of items) {
+        const urls = [item.imageUrl, ...(item.extraImages || [])].filter(Boolean);
+        for (const url of urls) {
+            try { referenced.add(path.basename(new URL(url).pathname)); } catch (e) { /* ignore */ }
+        }
+    }
+    if (!fs.existsSync(IMAGES_DIR)) return;
+    for (const file of fs.readdirSync(IMAGES_DIR)) {
+        if (!referenced.has(file)) {
+            try { fs.unlinkSync(path.join(IMAGES_DIR, file)); console.log(`[Bot] 清理未引用图片: ${file}`); } catch (e) { /* ignore */ }
+        }
+    }
+}
+
+// ===== 下载 Telegram 图片 =====
+async function downloadTelegramImage(fileId) {
+    try {
+        const file = await bot.api.getFile(fileId);
+        const url = `https://api.telegram.org/file/bot${BOT_TOKEN}/${file.file_path}`;
+        const resp = await fetch(url);
+        if (!resp.ok) return null;
+        const buffer = Buffer.from(await resp.arrayBuffer());
+        const ext = path.extname(file.file_path) || '.jpg';
+        const filename = uuidv4() + ext;
+        const filePath = path.join(IMAGES_DIR, filename);
+        fs.writeFileSync(filePath, buffer);
+        return `http://localhost:${PORT}/images/${filename}`;
+    } catch (err) {
+        console.warn('[Bot] 图片下载失败:', err.message);
+        return null;
+    }
+}
+
+// ===== 从转发消息提取 t.me 永久链接 =====
+function extractPostLink(ctx) {
+    const msg = ctx.message;
+    // 转发自频道/群组
+    const chat = msg.forward_from_chat;
+    const msgId = msg.forward_from_message_id;
+    if (chat && msgId) {
+        if (chat.username) {
+            return `https://t.me/${chat.username}/${msgId}`;
+        }
+        // 私密频道/群组: t.me/c/id/msgId
+        let chatId = chat.id;
+        if (String(chatId).startsWith('-100')) {
+            chatId = String(chatId).slice(4);
+        } else if (String(chatId).startsWith('-')) {
+            chatId = String(chatId).slice(1);
+        }
+        return `https://t.me/c/${chatId}/${msgId}`;
+    }
+    // 文本消息中的 t.me 链接
+    if (msg.text) {
+        const m = msg.text.match(/https?:\/\/t\.me\/[a-zA-Z0-9_\/-]+/);
+        if (m) return m[0];
+    }
+    if (msg.caption) {
+        const m = msg.caption.match(/https?:\/\/t\.me\/[a-zA-Z0-9_\/-]+/);
+        if (m) return m[0];
+    }
+    return '';
+}
+
+// ===== 提取磁力链接和直链 =====
+function extractMagnet(text) {
+    if (!text) return null;
+    const m = text.match(/magnet:\?xt=urn:btih:[a-fA-F0-9]{40}[^\s]*/i);
+    return m ? m[0] : null;
+}
+
+function extractVideoUrl(text) {
+    if (!text) return null;
+    const re = /https?:\/\/[^\s]+\.(mp4|avi|mkv|mov|wmv|flv|webm|ts)(\?[^\s]*)?/i;
+    const m = text.match(re);
+    if (m) return m[0];
+    // 也匹配无扩展名的常见视频域名
+    const domains = ['t.me', 'telegram.dog', 'cdn.*'];
+    return null;
+}
+
+// ===== 从消息/磁力提取标题 =====
+function extractTitle(text, magnetLink) {
+    if (!text && !magnetLink) return '未知资源';
+    if (magnetLink) {
+        const dn = magnetLink.match(/[?&]dn=([^&]+)/i);
+        if (dn) {
+            try { return decodeURIComponent(dn[1]); } catch { return dn[1]; }
+        }
+    }
+    if (text) {
+        // 去掉磁力链接本身
+        let clean = text.replace(/magnet:\?xt=urn:btih:[a-fA-F0-9]{40}[^\s]*/gi, '').trim();
+        clean = clean.replace(/https?:\/\/[^\s]+/gi, '').trim();
+        // 取第一行有效文本
+        const lines = clean.split('\n').map(l => l.trim()).filter(Boolean);
+        if (lines.length > 0) return lines[0];
+    }
+    return '未知资源';
+}
+
+// ===== 相册合并（media_group_id 缓冲） =====
+const albumBuffer = new Map();
+const ALBUM_TIMEOUT = 1500; // 1.5s 收集同组消息
+
+async function finalizeAlbum(groupId) {
+    const album = albumBuffer.get(groupId);
+    if (!album) return;
+    albumBuffer.delete(groupId);
+
+    const images = [];
+    for (const photo of album.photos) {
+        const url = await downloadTelegramImage(photo.file_id);
+        if (url) images.push(url);
+    }
+
+    // 用相册中的 caption（优先取视频 caption）
+    const caption = album.videoCaption || album.caption || '';
+    // 构建有意义的标题
+    let title = caption || album.videoFileName || 'Telegram 相册';
+    if (album.video && caption) {
+        title = caption;
+    } else if (album.video && !caption) {
+        title = album.videoFileName || 'Telegram 视频';
+    }
+
+    let imageUrl = '';
+    let extraImages = [];
+
+    if (images.length > 0) {
+        // 有图片：第一张做封面，其余做额外图，不要视频缩略图
+        imageUrl = images[0];
+        extraImages = images.slice(1);
+    } else if (album.video && album.videoThumbnails.length > 0) {
+        // 纯视频：取所有视频缩略图，最多 6 张
+        const thumbs = [];
+        for (const thumbId of album.videoThumbnails) {
+            if (thumbs.length >= 6) break;
+            const url = await downloadTelegramImage(thumbId);
+            if (url) thumbs.push(url);
+        }
+        if (thumbs.length > 0) {
+            imageUrl = thumbs[0];
+            extraImages = thumbs.slice(1);
+        }
+    }
+
+    const fIds = album.videoFileIds;
+    addPending({
+        type: 'video',
+        url: '',
+        title,
+        imageUrl,
+        extraImages,
+        messageUrl: album.messageUrl,
+        fileId: fIds[0] || '',
+        fileIds: fIds.length > 1 ? fIds : []
+    });
+    console.log(`[Bot] 相册完成: ${title?.substring(0, 40)} | ${images.length + (album.video ? 1 : 0)} 个媒体`);
+}
+
+function bufferToAlbum(ctx, type, data) {
+    const groupId = ctx.message.media_group_id;
+    const msg = ctx.message;
+
+    if (!albumBuffer.has(groupId)) {
+        albumBuffer.set(groupId, {
+            video: false,
+            videoThumbnails: [],
+            videoFileName: '',
+            videoCaption: '',
+            videoFileIds: [],
+            photos: [],
+            caption: msg.caption || '',
+            messageUrl: extractPostLink(ctx),
+            timer: null
+        });
+    }
+
+    const album = albumBuffer.get(groupId);
+    // 刷新 timer
+    if (album.timer) clearTimeout(album.timer);
+    album.timer = setTimeout(() => finalizeAlbum(groupId), ALBUM_TIMEOUT);
+
+    if (type === 'video') {
+        album.video = true;
+        if (data.thumbnail) album.videoThumbnails.push(data.thumbnail.file_id);
+        if (data.file_name) album.videoFileName = data.file_name;
+        if (data.fileId) album.videoFileIds.push(data.fileId);
+        if (msg.caption) album.videoCaption = msg.caption;
+    } else if (type === 'photo') {
+        // 取最大尺寸
+        const best = msg.photo.reduce((a, b) => (a.width * a.height > b.width * b.height) ? a : b);
+        album.photos.push({ file_id: best.file_id });
+    }
+
+    // 合并 caption（优先取已存在的）
+    if (msg.caption && !album.caption) album.caption = msg.caption;
+    if (!album.messageUrl) album.messageUrl = extractPostLink(ctx);
+}
+
+// ===== Telegram Bot =====
+const bot = new Bot(BOT_TOKEN);
+
+bot.on(':text', async (ctx) => {
+    const userId = String(ctx.from?.id || '');
+    if (ALLOWED_USER_ID && userId !== ALLOWED_USER_ID) {
+        console.log(`[Bot] 忽略用户 ${userId} 的消息`);
+        return;
+    }
+
+    const text = ctx.message.text;
+    console.log(`[Bot] 收到消息: ${text?.substring(0, 60)}...`);
+
+    const magnetLink = extractMagnet(text);
+    const videoUrl = extractVideoUrl(text);
+
+    if (!magnetLink && !videoUrl) {
+        console.log('[Bot] 未找到磁力或视频链接，忽略');
+        return;
+    }
+
+    const title = extractTitle(text, magnetLink);
+    const url = magnetLink || videoUrl;
+    const type = magnetLink ? 'magnet' : 'video';
+
+    // 处理消息中的图片
+    const msg = ctx.message;
+    const imageUrls = [];
+    if (msg.photo && msg.photo.length > 0) {
+        // 取最大尺寸的图片
+        const best = msg.photo.reduce((a, b) => (a.width * a.height > b.width * b.height) ? a : b);
+        const imgUrl = await downloadTelegramImage(best.file_id);
+        if (imgUrl) imageUrls.push(imgUrl);
+    }
+
+    // 处理相册中的其他图片
+    const mediaGroupId = msg.media_group_id;
+    if (mediaGroupId) {
+        // 实际 grammy 需要 album middleware 才能捕获同组媒体
+        // 这里暂不处理相册，先只取单条消息的图片
+    }
+
+    const entry = {
+        type,
+        url: url,
+        title: title,
+        imageUrl: imageUrls[0] || '',
+        extraImages: imageUrls.slice(1),
+        messageUrl: extractPostLink(ctx)
+    };
+
+    addPending(entry);
+    console.log(`[Bot] 已加入队列: ${type} | ${title?.substring(0, 40)} | ${imageUrls.length} 张图`);
+});
+
+bot.on(':photo', async (ctx) => {
+    const userId = String(ctx.from?.id || '');
+    if (ALLOWED_USER_ID && userId !== ALLOWED_USER_ID) return;
+    const msg = ctx.message;
+
+    // 属于相册的图片由缓冲处理
+    if (msg.media_group_id) {
+        console.log(`[Bot] 相册图片加入缓冲: ${msg.media_group_id}`);
+        bufferToAlbum(ctx, 'photo');
+        return;
+    }
+
+    // 单张图片（无相册）→ 创建 pending 条目
+    const best = msg.photo.reduce((a, b) => (a.width * a.height > b.width * b.height) ? a : b);
+    const imageUrl = await downloadTelegramImage(best.file_id);
+    const title = msg.caption || 'Telegram 图片';
+    const messageUrl = extractPostLink(ctx);
+    addPending({ type: 'video', url: '', title, imageUrl, extraImages: [], messageUrl });
+    console.log(`[Bot] 已加入队列: image | ${title?.substring(0, 40)}${messageUrl ? ' | t.me' : ''}`);
+});
+
+bot.on(':video', async (ctx) => {
+    const userId = String(ctx.from?.id || '');
+    if (ALLOWED_USER_ID && userId !== ALLOWED_USER_ID) return;
+
+    const video = ctx.message.video;
+    const msg = ctx.message;
+
+    // 属于相册的视频由缓冲处理
+    if (msg.media_group_id) {
+        console.log(`[Bot] 相册视频加入缓冲: ${msg.media_group_id}`);
+        const fileId = video.file_id;
+        console.log('[Bot] 相册视频 file_id:', fileId.substring(0, 20) + '...');
+        addFileMapping(fileId, msg.chat.id, msg.message_id);
+        bufferToAlbum(ctx, 'video', { thumbnail: video.thumbnail, file_name: video.file_name, fileId });
+        return;
+    }
+
+    console.log(`[Bot] 收到视频: ${video.file_name || '无文件名'} ${video.file_size ? '(' + (video.file_size / 1024 / 1024).toFixed(1) + ' MB)' : ''}`);
+
+    const fileId = video.file_id;
+    addFileMapping(fileId, msg.chat.id, msg.message_id);
+
+    let title = (msg.caption || '').trim() || video.file_name || 'Telegram 视频';
+    const captionMagnet = extractMagnet(msg.caption || '');
+    if (captionMagnet) {
+        const imageUrl = video.thumbnail ? (await downloadTelegramImage(video.thumbnail.file_id)) || '' : '';
+        addPending({ type: 'magnet', url: captionMagnet, title, imageUrl, extraImages: [], messageUrl: extractPostLink(ctx), fileId: fileId || '', fileIds: fileId ? [fileId] : [] });
+        console.log(`[Bot] 已加入队列: magnet | ${title}`);
+        return;
+    }
+
+    let imageUrl = '';
+    if (video.thumbnail) {
+        imageUrl = await downloadTelegramImage(video.thumbnail.file_id);
+    }
+
+    const messageUrl = extractPostLink(ctx);
+    addPending({ type: 'video', url: '', title, imageUrl, extraImages: [], messageUrl, fileId: fileId || '', fileIds: fileId ? [fileId] : [] });
+    console.log(`[Bot] 已加入队列: video | ${title}${messageUrl ? ' | t.me' : ''}${fileId ? ' | fileId' : ''}`);
+});
+
+bot.on(':document', async (ctx) => {
+    const userId = String(ctx.from?.id || '');
+    if (ALLOWED_USER_ID && userId !== ALLOWED_USER_ID) return;
+
+    const doc = ctx.message.document;
+    const fileName = (doc.file_name || '').toLowerCase();
+
+    if (!/\.(mp4|avi|mkv|mov|wmv|flv|webm|ts)$/i.test(fileName)) {
+        console.log(`[Bot] 文件 ${doc.file_name} 不是视频格式，忽略`);
+        return;
+    }
+
+    console.log(`[Bot] 收到视频文件: ${doc.file_name} ${doc.file_size ? '(' + (doc.file_size / 1024 / 1024).toFixed(1) + ' MB)' : ''}`);
+
+    const fileId = doc.file_id;
+    addFileMapping(fileId, ctx.message.chat.id, ctx.message.message_id);
+
+    const title = ctx.message.caption || doc.file_name || 'Telegram 视频文件';
+    const messageUrl = extractPostLink(ctx);
+
+    addPending({ type: 'video', url: '', title, imageUrl: '', extraImages: [], messageUrl, fileId: fileId || '', fileIds: fileId ? [fileId] : [] });
+    console.log(`[Bot] 已加入队列: video | ${title}${messageUrl ? ' | t.me' : ''}`);
+});
+
+bot.catch((err) => {
+    console.error('[Bot] 错误:', err.message);
+});
+
+// 启动 Bot（长轮询）
+bot.start({
+    onStart: async () => {
+        const me = await bot.api.getMe();
+        BOT_USERNAME = me.username || BOT_USERNAME;
+        console.log(`[Bot] Telegram Bot 已启动，允许用户 ID: ${ALLOWED_USER_ID || '所有人'}${BOT_USERNAME ? ', bot: @' + BOT_USERNAME : ''}`);
+    }
+});
+
+// ===== Express HTTP API =====
+const app = express();
+app.use(express.json());
+
+// 静态资源（卡片缩略图）
+app.use('/images', express.static(IMAGES_DIR));
+
+// 获取待消费队列
+app.get('/api/pending', (req, res) => {
+    const items = loadPending();
+    res.json(items);
+});
+
+// 消费后删除
+app.delete('/api/pending/:id', (req, res) => {
+    removePending(req.params.id);
+    res.json({ success: true });
+});
+
+// 解析 fileId 为可下载 URL（仅限 ≤20MB 的小文件）
+app.get('/api/resolve-file/:fileId', async (req, res) => {
+    try {
+        const file = await bot.api.getFile(req.params.fileId);
+        const downloadUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${file.file_path}`;
+        res.json({ success: true, downloadUrl, method: 'botapi' });
+    } catch (err) {
+        if (err.message.includes('file is too big')) {
+            res.json({ success: false, error: 'file_too_big', needsTgFallback: true });
+        } else {
+            res.json({ success: false, error: err.message });
+        }
+    }
+});
+
+// 手动添加条目（供扩展或其他工具调用）
+app.post('/api/add', (req, res) => {
+    const { type, url, title, imageUrl, extraImages } = req.body;
+    if (!type || !url) {
+        return res.status(400).json({ error: '缺少 type 或 url' });
+    }
+    addPending({ type, url, title: title || '未知资源', imageUrl: imageUrl || '', extraImages: extraImages || [] });
+    res.json({ success: true });
+});
+
+// ===== Telethon 用户登录 =====
+
+// 发送验证码
+app.post('/api/telethon/send-code', async (req, res) => {
+    const { phoneNumber } = req.body;
+    if (!phoneNumber) return res.status(400).json({ error: '缺少 phoneNumber' });
+
+    try {
+        const client = await getUserClient();
+        if (!client) return res.status(503).json({ error: 'API_ID/API_HASH 未配置' });
+        if (!client.connected) await client.connect();
+
+        // 检查是否已登录
+        if (await client.checkAuthorization()) {
+            return res.json({ success: true, alreadyLoggedIn: true });
+        }
+
+        const result = await client.sendCode({ apiId: API_ID, apiHash: API_HASH }, phoneNumber);
+        pendingPhoneCode = { phoneNumber, phoneCodeHash: result.phoneCodeHash };
+        console.log(`[用户] 验证码已发送到 ${phoneNumber}`);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('[用户] 发送验证码失败:', err.message);
+        res.json({ success: false, error: err.message });
+    }
+});
+
+// 验证登录
+app.post('/api/telethon/sign-in', async (req, res) => {
+    const { code } = req.body;
+    if (!code) return res.status(400).json({ error: '缺少 code' });
+    if (!pendingPhoneCode) return res.status(400).json({ error: '请先发送验证码' });
+
+    try {
+        const client = await getUserClient();
+        if (!client) return res.status(503).json({ error: 'API_ID/API_HASH 未配置' });
+        if (!client.connected) await client.connect();
+
+        try {
+            const signInResult = await client.invoke(new Api.auth.SignIn({
+                phoneNumber: pendingPhoneCode.phoneNumber,
+                phoneCodeHash: pendingPhoneCode.phoneCodeHash,
+                phoneCode: code,
+            }));
+            saveUserSession(client);
+            pendingPhoneCode = null;
+            console.log('[用户] 登录成功');
+            res.json({ success: true });
+        } catch (signInErr) {
+            if (signInErr.errorMessage === 'SESSION_PASSWORD_NEEDED') {
+                // 需要两步验证
+                pendingPhoneCode = { ...pendingPhoneCode, needs2fa: true };
+                res.json({ success: false, error: '2FA 需要密码', needs2fa: true });
+            } else {
+                throw signInErr;
+            }
+        }
+    } catch (err) {
+        console.error('[用户] 登录失败:', err.message);
+        res.json({ success: false, error: err.message });
+    }
+});
+
+// 2FA 密码验证
+app.post('/api/telethon/2fa', async (req, res) => {
+    const { password } = req.body;
+    if (!password) return res.status(400).json({ error: '缺少 password' });
+
+    try {
+        const client = await getUserClient();
+        if (!client) return res.status(503).json({ error: 'API_ID/API_HASH 未配置' });
+        if (!client.connected) await client.connect();
+
+        const pwdResult = await client.invoke(new Api.account.GetPassword());
+        const pwdCheck = await computeCheck(pwdResult, password);
+        await client.invoke(new Api.auth.CheckPassword({ password: pwdCheck }));
+        saveUserSession(client);
+        console.log('[用户] 2FA 登录成功');
+        res.json({ success: true });
+    } catch (err) {
+        console.error('[用户] 2FA 失败:', err.message);
+        res.json({ success: false, error: err.message });
+    }
+});
+
+// 检查登录状态
+app.get('/api/telethon/status', async (req, res) => {
+    try {
+        const client = await getUserClient();
+        if (!client) return res.json({ loggedIn: false });
+        const ok = await client.checkAuthorization();
+        res.json({ loggedIn: ok });
+    } catch {
+        res.json({ loggedIn: false });
+    }
+});
+
+// 注销
+app.post('/api/telethon/logout', async (req, res) => {
+    try {
+        const client = await getUserClient();
+        if (client) await client.disconnect();
+        if (fs.existsSync(USER_SESSION_FILE)) fs.unlinkSync(USER_SESSION_FILE);
+        userClient = null;
+        userClientPromise = null;
+        console.log('[用户] 已注销');
+        res.json({ success: true });
+    } catch (err) {
+        res.json({ success: false, error: err.message });
+    }
+});
+
+// ===== 转发消息到 @PikPakBot =====
+app.post('/api/forward-to-pikpak/:fileId', async (req, res) => {
+    const fileId = req.params.fileId;
+    const map = loadFileMap();
+    const entry = map[fileId];
+    if (!entry) {
+        return res.status(404).json({ error: '找不到该 file_id 对应的消息信息（Bot 重启后需重新发送视频）' });
+    }
+
+    let client;
+    try {
+        client = await getUserClient();
+        if (!client) return res.status(503).json({ error: '用户未登录，请先在 Telegram 页面登录' });
+        if (!client.connected) await client.connect();
+        if (!(await client.checkAuthorization())) {
+            return res.status(401).json({ error: '用户 session 已过期，请重新登录' });
+        }
+
+        console.log(`[转发] ${fileId.substring(0, 20)}... → ${TARGET_BOT} (chatId=${entry.chatId}, msgId=${entry.messageId})`);
+
+        // 通过时间戳查找正确的 MTProto 消息（Bot API msgId 和 MTProto msgId 不同）
+        const msg = await findMtprotoMessage(fileId, entry);
+
+        // 使用 InputMediaDocument 直接发送视频文件（跨对话，不重新上传）
+        const doc = msg.media.document;
+        const inputMedia = new Api.InputMediaDocument({
+            id: new Api.InputDocument({
+                id: doc.id,
+                accessHash: doc.accessHash,
+                fileReference: doc.fileReference,
+            }),
+        });
+        const targetPeer = await client.getInputEntity(TARGET_BOT);
+        await client.invoke(new Api.messages.SendMedia({
+            peer: targetPeer,
+            media: inputMedia,
+            message: '',
+            randomId: BigInt(Math.floor(Math.random() * 1e15)),
+        }));
+
+        console.log(`[转发] 成功: ${fileId.substring(0, 20)}...`);
+        res.json({ success: true });
+    } catch (err) {
+        console.error(`[转发] 失败: ${err.message}`);
+        res.json({ success: false, error: err.message });
+    }
+});
+
+// 健康检查
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', uptime: process.uptime() });
+});
+
+const server = app.listen(PORT, () => {
+    console.log(`[Bot] HTTP API 运行在 http://localhost:${PORT}`);
+});
+
+// 优雅关闭
+process.on('SIGINT', () => {
+    console.log('\n[Bot] 正在关闭...');
+    bot.stop();
+    server.close(() => process.exit(0));
+});
+
+process.on('SIGTERM', () => {
+    bot.stop();
+    server.close(() => process.exit(0));
+});

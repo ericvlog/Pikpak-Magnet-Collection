@@ -1019,13 +1019,11 @@
                 const errorMsg = err.message || '预览失败';
                 console.warn('[Magnet Detector] 预览失败:', errorMsg);
 
-                // 从磁力链接提取标题
                 let title = magnetLink;
                 const dnMatch = magnetLink.match(/[?&]dn=([^&]+)/i);
                 if (dnMatch) {
                     try { title = decodeURIComponent(dnMatch[1]); } catch(e) {}
                 } else {
-                    // 找页面中最近的链接文本
                     const btn = document.querySelector(`.pk-magnet-btn[data-magnet="${CSS.escape(magnetLink)}"]`);
                     if (btn && btn.parentElement) {
                         const prev = btn.parentElement.querySelector('a');
@@ -1033,9 +1031,7 @@
                     }
                 }
                 const hash = (magnetLink.match(/btih:([a-fA-F0-9]{40})/i) || [])[1] || '';
-                const size = '';
 
-                // 429 时记录到失败列表
                 if (errorMsg.includes('429') ||
                     errorMsg.includes('繁忙') ||
                     errorMsg.includes('too many requests') ||
@@ -1047,13 +1043,16 @@
                     }
                 }
 
-                // 弹出简化窗口：有标题和操作按钮，无预览图
+                // 保持完整弹窗结构，仅替换图片区域为占位
                 const overlay = document.createElement('div');
                 overlay.className = 'pk-magnet-preview-overlay';
                 overlay.innerHTML = `
                     <div class="pk-magnet-preview-card">
-                        <div class="pk-magnet-preview-hero" style="min-height:40px;">
-                            <div style="color:#888;font-size:14px;padding:10px;">预览暂不可用（${errorMsg}）</div>
+                        <div class="pk-magnet-preview-hero" style="min-height:40px;display:flex;align-items:center;justify-content:center;background:#f5f5f5;">
+                            <div style="color:#999;font-size:14px;text-align:center;padding:16px;">
+                                <div style="font-size:20px;margin-bottom:4px;">🖼️</div>
+                                预览暂不可用<br><span style="font-size:12px;">${escapeHtml(errorMsg)}</span>
+                            </div>
                             <button class="pk-magnet-preview-close">✖</button>
                         </div>
                         <div class="pk-magnet-preview-body">
@@ -1062,8 +1061,14 @@
                                 <div class="pk-magnet-preview-desc">whatslink.info 暂时无法预览，仍可直接操作：</div>
                             </div>
                             ${hash ? `<div class="pk-magnet-preview-hash">磁力：${hash}</div>` : ''}
-                            <div class="pk-magnet-preview-actions" style="margin-top:14px;">
-                                <button class="btn-outline" data-action="offline">离线到 PikPak</button>
+                            <div class="pk-magnet-preview-folder" id="magnetPreviewFolderSelector">
+                                <span class="pk-magnet-preview-folder-label">保存到：</span>
+                                <span class="pk-magnet-preview-folder-name" id="magnetPreviewFolderName">📁 默认文件夹</span>
+                                <span class="pk-magnet-preview-folder-arrow" id="magnetPreviewFolderArrow">▼</span>
+                                <div class="pk-magnet-preview-folder-dropdown" id="magnetPreviewFolderDropdown" style="display:none;"></div>
+                            </div>
+                            <div class="pk-magnet-preview-actions">
+                                <button class="btn-outline" data-action="offline">离线下载</button>
                                 <button class="btn-outline" data-action="save">保存到管理器</button>
                                 <button class="btn-primary" data-action="both">离线并保存</button>
                             </div>
@@ -1073,10 +1078,122 @@
                 document.body.appendChild(overlay);
 
                 let selectedParentId = '';
+                let selectedFolderName = '📁 默认文件夹';
+                let folderDropdownOpen = false;
+
                 const close = () => overlay.remove();
                 overlay.querySelector('.pk-magnet-preview-close').addEventListener('click', close);
                 overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
 
+                // ===== 文件夹选择器 =====
+                const folderSelector = overlay.querySelector('#magnetPreviewFolderSelector');
+                const folderNameEl = overlay.querySelector('#magnetPreviewFolderName');
+                const folderArrowEl = overlay.querySelector('#magnetPreviewFolderArrow');
+                const folderDropdown = overlay.querySelector('#magnetPreviewFolderDropdown');
+                let folderNavPath = [];
+
+                function closeFolderDropdown() {
+                    folderDropdownOpen = false;
+                    folderArrowEl.classList.remove('open');
+                    folderDropdown.style.display = 'none';
+                }
+
+                function getCurrentParentId() {
+                    return folderNavPath.length > 0 ? folderNavPath[folderNavPath.length - 1].id : '';
+                }
+
+                async function loadAndRenderCurrentLevel() {
+                    folderDropdown.innerHTML = '<div class="pk-magnet-preview-folder-option loading">加载中...</div>';
+                    try {
+                        const parentId = getCurrentParentId();
+                        const folders = await ppFetchChildFoldersViaMessage(parentId);
+                        renderFolderList(folders);
+                    } catch (err) {
+                        folderDropdown.innerHTML = '<div class="pk-magnet-preview-folder-option error">加载失败: ' + escapeHtml(err.message) + '</div>';
+                    }
+                }
+
+                function renderFolderList(folders) {
+                    let html = '';
+                    if (folderNavPath.length > 0) {
+                        html += '<div class="pk-magnet-preview-folder-option back" data-action="back">← 返回上级</div>';
+                    }
+                    for (const f of folders) {
+                        const active = f.id === selectedParentId ? ' active' : '';
+                        html += `<div class="pk-magnet-preview-folder-option${active}" data-id="${f.id}" data-enter="1">📁 ${escapeHtml(f.name)}</div>`;
+                    }
+                    html += '<div class="pk-magnet-preview-folder-option create" data-action="create">➕ 新建文件夹</div>';
+                    folderDropdown.innerHTML = html;
+
+                    const backBtn = folderDropdown.querySelector('[data-action="back"]');
+                    if (backBtn) {
+                        backBtn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            folderNavPath.pop();
+                            loadAndRenderCurrentLevel();
+                        });
+                    }
+
+                    folderDropdown.querySelectorAll('[data-enter="1"]').forEach(opt => {
+                        opt.addEventListener('click', async (e) => {
+                            e.stopPropagation();
+                            const id = opt.dataset.id;
+                            const name = opt.textContent.replace('📁', '').trim();
+                            folderNavPath.push({ id, name });
+                            selectedParentId = id;
+                            selectedFolderName = '📂 ' + folderNavPath.map(p => p.name).join(' / ');
+                            folderNameEl.textContent = selectedFolderName;
+                            folderDropdown.querySelectorAll('.pk-magnet-preview-folder-option').forEach(o => o.classList.remove('active'));
+                            opt.classList.add('active');
+                            await loadAndRenderCurrentLevel();
+                        });
+                    });
+
+                    const createOpt = folderDropdown.querySelector('[data-action="create"]');
+                    if (createOpt) {
+                        createOpt.addEventListener('click', async (e) => {
+                            e.stopPropagation();
+                            const name = prompt('请输入新文件夹名称：');
+                            if (!name || !name.trim()) return;
+                            try {
+                                createOpt.textContent = '创建中...';
+                                const parentId = folderNavPath.length > 0 ? folderNavPath[folderNavPath.length - 1].id : '';
+                                const result = await ppCreateFolderViaMessage(name.trim(), parentId);
+                                selectedParentId = result.id;
+                                selectedFolderName = '📂 ' + (folderNavPath.length > 0 ? folderNavPath.map(p => p.name).join(' / ') + ' / ' : '') + name.trim();
+                                folderNameEl.textContent = selectedFolderName;
+                                await loadAndRenderCurrentLevel();
+                            } catch (err) {
+                                alert('创建文件夹失败: ' + err.message);
+                            }
+                        });
+                    }
+                }
+
+                folderSelector.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    if (!folderDropdownOpen) {
+                        folderDropdownOpen = true;
+                        folderArrowEl.classList.add('open');
+                        folderDropdown.style.display = 'block';
+                        if (!folderDropdown.dataset.loaded) {
+                            await loadAndRenderCurrentLevel();
+                            folderDropdown.dataset.loaded = 'true';
+                        } else {
+                            loadAndRenderCurrentLevel();
+                        }
+                    } else {
+                        closeFolderDropdown();
+                    }
+                });
+
+                document.addEventListener('click', (e) => {
+                    if (folderDropdownOpen && !folderSelector.contains(e.target)) {
+                        closeFolderDropdown();
+                    }
+                });
+
+                // ===== 操作按钮 =====
                 overlay.querySelectorAll('[data-action]').forEach(btn => {
                     btn.addEventListener('click', async () => {
                         const action = btn.dataset.action;
@@ -1086,18 +1203,18 @@
                         try {
                             if (action === 'offline') {
                                 await offlineToPikPak(magnetLink, selectedParentId);
-                                showToast('✅ 已发送到 PikPak');
+                                showToast('✅ 已离线到 PikPak');
                                 close();
                             } else if (action === 'save') {
                                 const editedName = (overlay.querySelector('.pk-magnet-preview-title').textContent || '').trim() || title;
-                                await saveMagnetToManager(magnetLink, editedName, size, '');
+                                await saveMagnetToManager(magnetLink, editedName, '', '');
                                 showToast('✅ 已保存到管理器');
                                 close();
                             } else if (action === 'both') {
                                 const editedName = (overlay.querySelector('.pk-magnet-preview-title').textContent || '').trim() || title;
                                 await Promise.all([
                                     offlineToPikPak(magnetLink, selectedParentId),
-                                    saveMagnetToManager(magnetLink, editedName, size, '')
+                                    saveMagnetToManager(magnetLink, editedName, '', '')
                                 ]);
                                 showToast('✅ 已离线并保存');
                                 close();
