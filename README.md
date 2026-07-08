@@ -12,6 +12,7 @@
 | **🔌 浏览器扩展** | `extension/` | 增强功能：任意网页磁力嗅探、图片代理下载、PikPak 直连（无需 CORS 代理） |
 | **🌐 CORS 代理** | `api/` | Vercel Serverless，浏览器直调 PikPak API 的中转（扩展方案的备选） |
 | **🖥️ 本地代理** | `proxy/` | 本地 Node.js 服务器，同时提供 API 代理和静态页面服务 |
+| **🤖 Telegram Bot** | `telegram-bot/` | 通过 MTProto 解析 t.me 链接，将视频转发到 @PikPak_Bot 离线 |
 
 ## 流程总览
 
@@ -189,6 +190,74 @@ https://xxxx.trycloudflare.com/?url=
 
 ---
 
+## 部署 Telegram Bot
+
+`telegram-bot/` 是一个 Node.js Telegram 客户端，通过 MTProto (gramjs) 登录你的 Telegram 账号，解析 t.me 链接中的视频/图片，并转发到 @PikPak_Bot 离线下载。
+
+### 功能
+
+- **解析 t.me 链接**：从频道/群组消息中提取视频、图片、磁力链接
+- **相册支持**：自动检测 groupedId，获取相册中的所有媒体
+- **私密频道检测**：检测频道是否禁止转发（`noforwards`），卡片上显示 🔒 图标，离线时打开 t.me 链接
+- **转发到 @PikPak_Bot**：非私密频道的视频直接通过 MTProto `InputMediaDocument` 转发
+- **缩略图**：自动下载视频缩略图，取最大可用尺寸
+
+### 安装与运行
+
+```bash
+cd telegram-bot
+npm install
+```
+
+### 配置
+
+复制 `.env.example` 为 `.env`，填入：
+
+```env
+API_ID=你的API_ID              # 从 https://my.telegram.org/apps 获取
+API_HASH=你的API_HASH
+BOT_TOKEN=你的Bot_Token        # 从 @BotFather 创建
+BOT_USERNAME=你的Bot用户名
+ALLOWED_USER_ID=你的Telegram用户ID  # 可选，限制 Bot 只接受你的命令
+TARGET_BOT_USERNAME=@PikPak_Bot    # 目标 Bot
+PORT=19876                         # HTTP API 端口
+```
+
+### 启动
+
+Windows 双击 `start_bot.bat`，或命令行：
+
+```bash
+node telegram-bot/index.js
+```
+
+首次启动需要扫码或手机号登录 Telegram 账号（用户 session，用于 MTProto 操作）。
+
+### 工作流
+
+```
+用户复制 t.me 链接
+  → 页面/扩展检测到链接
+  → POST /api/resolve-tg-link
+  → gramjs 获取消息及媒体
+     ├── 视频 → 注册 docMap，创建 pending card
+     ├── 图片 → 下载缩略图
+     └── 磁力 → 提取磁力链接
+  → 用户点击「离线」
+     ├── 私密频道 → 打开 t.me 链接
+     └── 普通频道 → 转发 InputMediaDocument 到 @PikPak_Bot
+```
+
+### API
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/api/resolve-tg-link` | POST | 解析 t.me 链接，返回媒体信息和 pending 状态 |
+| `/api/pending` | GET | 获取所有 pending 卡片 |
+| `/api/pending/:id` | DELETE | 删除指定 pending 卡片 |
+
+---
+
 ## PikPak 登录
 
 扩展和页面各自独立维护 Token（不共享），可以都登录、互不影响。
@@ -328,7 +397,14 @@ https://xxxx.trycloudflare.com/?url=
 │   ├── worker.js           ← Cloudflare Worker 代理
 │   ├── start-server.bat    ← Windows 一键启动脚本（含 Cloudflare Tunnel）
 │   └── cloudflared.exe     ← Cloudflare Tunnel 客户端（首次自动下载）
-├── .gitignore              ← 排除 *.exe、node_modules/
+├── telegram-bot/           ← Telegram Bot（gramjs MTProto 客户端）
+│   ├── index.js            ← Express 服务器 + gramjs 客户端
+│   ├── .env.example        ← 配置模板（API_ID、API_HASH、BOT_TOKEN）
+│   ├── docMap.json         ← 已注册的 document 映射（自动生成）
+│   ├── pending.json        ← 待处理的 t.me 卡片（自动生成）
+│   ├── images/             ← 下载的缩略图（自动生成）
+│   └── start_bot.bat       ← Windows 一键启动
+├── .gitignore              ← 排除 *.exe、node_modules/、telegram-bot 运行时数据
 ├── package.json            ← Vercel Node.js 项目配置
 └── README.md
 ```
