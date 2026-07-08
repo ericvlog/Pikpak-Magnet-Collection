@@ -1324,6 +1324,10 @@
         throw new Error('该卡片没有 fileId，无法离线到 PikPak（仅支持通过 Bot 转发的视频离线）');
     }
     async function offlineCard(card, parentId) {
+        if (card.restricted) {
+            window.open(card.messageUrl, '_blank');
+            return;
+        }
         const fIds = (card.fileIds && card.fileIds.length > 0) ? card.fileIds : (card.fileId ? [card.fileId] : []);
         if (fIds.length > 1) {
             let ok = 0, fail = 0;
@@ -1389,9 +1393,16 @@
     // ----- forwardToPikpakBotViaBridge -----
     function forwardToPikpakBotViaBridge(fileId) {
         return new Promise((resolve, reject) => {
+            let timedOut = false;
+            const timer = setTimeout(() => {
+                timedOut = true;
+                window.removeEventListener('message', handler);
+                reject(new Error('转发超时（大文件下载较慢，可稍后检查 @PikPak_Bot）'));
+            }, 300000);
             const handler = (event) => {
                 if (event.data && event.data.type === 'FORWARD_TO_PIKPAK_RESULT') {
                     window.removeEventListener('message', handler);
+                    if (!timedOut) clearTimeout(timer);
                     if (event.data.success) {
                         resolve();
                     } else {
@@ -1401,10 +1412,6 @@
             };
             window.addEventListener('message', handler);
             window.postMessage({ type: 'REQUEST_FORWARD_TO_PIKPAK', fileId }, '*');
-            setTimeout(() => {
-                window.removeEventListener('message', handler);
-                reject(new Error('扩展未响应'));
-            }, 30000);
         });
     }
 
@@ -1947,9 +1954,9 @@ function bindMagnetLinkEvents() {
                         <div class="card-preview-folder-dropdown" id="previewFolderDropdown" style="display:none;"></div>
                     </div>
                     <div class="card-preview-actions">
-                        <button class="btn-outline" data-action="offline">📥 离线下载</button>
+                        <button class="btn-outline" data-action="offline">${card.restricted ? '📨 打开 Telegram' : '📥 离线下载'}</button>
                         <button class="btn-outline" data-action="save">💾 更新</button>
-                        <button class="btn-primary" data-action="both">⚡ 离线并更新</button>
+                        <button class="btn-primary" data-action="both">⚡ ${card.restricted ? '打开并更新' : '离线并更新'}</button>
                     </div>
                 </div>
             </div>
@@ -2099,7 +2106,9 @@ function bindMagnetLinkEvents() {
 
                 try {
                     if (action === 'offline' || action === 'both') {
-                        if (card.videoUrl) {
+                        if (card.restricted) {
+                            window.open(card.messageUrl, '_blank');
+                        } else if (card.videoUrl) {
                             await sendToPikPakViaBridge(card.videoUrl, selectedParentId);
                         } else {
                             await offlineCard(card, selectedParentId);
@@ -2120,11 +2129,11 @@ function bindMagnetLinkEvents() {
                     }
 
                     if (action === 'offline') {
-                        showToast('✅ 已发送到 PikPak');
+                        showToast(card.restricted ? '已打开 Telegram 链接' : '✅ 已发送到 PikPak');
                     } else if (action === 'save') {
                         showToast('✅ 已更新');
                     } else {
-                        showToast('✅ 已离线并更新');
+                        showToast(card.restricted ? '已打开 Telegram 链接' : '✅ 已离线并更新');
                     }
                     close();
                 } catch (err) {
@@ -3188,7 +3197,7 @@ function loginGDrive() {
     // ===== 扩展队列导入 =====
     let autoImportTimer = null;
     function fetchPendingFromExtension() { return new Promise((resolve, reject) => { const handler = (event) => { if (event.data && event.data.type === 'PENDING_MAGNETS_RESULT') { window.removeEventListener('message', handler); if (event.data.success) { resolve({ data: event.data.data, total: event.data.total }); } else { reject(new Error(event.data.error || '获取失败')); } } }; window.addEventListener('message', handler); window.postMessage({ type: 'REQUEST_PENDING_MAGNETS' }, '*'); setTimeout(() => { window.removeEventListener('message', handler); reject(new Error('扩展未响应')); }, 10000); }); }
-    async function importFromExtension() { try { if (window.__MAGNET_HELPER_EXTENSION__) { await new Promise((resolve) => { const handler = (event) => { if (event.data && event.data.type === 'BOT_POLL_COMPLETE') { window.removeEventListener('message', handler); resolve(); } }; window.addEventListener('message', handler); window.postMessage({ type: 'REQUEST_BOT_POLL' }, '*'); setTimeout(() => { window.removeEventListener('message', handler); resolve(); }, 3000); }); } const result = await fetchPendingFromExtension(); if (!result.data || result.data.length === 0) { showToast('扩展队列为空', false); return; } const items = result.data.map(item => ({ title: item.title || '未知', magnetLink: item.magnet || '', videoUrl: item.videoUrl || '', size: item.size || '', imageUrl: item.imageUrl || '', extraImages: item.extraImages || [], messageUrl: item.messageUrl || '', fileId: item.fileId || '', fileIds: item.fileIds || [] })); const newMagnets = []; for (const src of items) { const title = src.title || ''; const magnetLink = src.magnetLink || ''; const videoUrl = src.videoUrl || ''; const size = src.size || ''; const fileId = src.fileId || ''; const fileIds = src.fileIds || []; if (magnetLink && magnets.some(m => m.magnetLink && m.magnetLink.toLowerCase() === magnetLink.toLowerCase())) continue; if (videoUrl && magnets.some(m => m.videoUrl && m.videoUrl.toLowerCase() === videoUrl.toLowerCase())) continue; if (src.messageUrl && magnets.some(m => m.messageUrl && m.messageUrl === src.messageUrl)) continue; let finalImageUrl = src.imageUrl || ''; if (finalImageUrl && !finalImageUrl.startsWith('img_') && (finalImageUrl.startsWith('http://') || finalImageUrl.startsWith('https://'))) { try { let blob = null; if (window.__MAGNET_HELPER_EXTENSION__) { try { blob = await fetchImageViaExtension(finalImageUrl); } catch(e) {} } if (!blob) { const response = await fetch(finalImageUrl); if (response.ok) blob = await response.blob(); } if (blob) { const newId = await storeImageBlob(finalImageUrl, blob); if (newId) finalImageUrl = newId; } } catch(err) { console.warn('导入时图片处理失败:', err.message); } } let extraImageIds = []; for (const extraUrl of (src.extraImages || [])) { try { let blob = null; if (window.__MAGNET_HELPER_EXTENSION__) { try { blob = await fetchImageViaExtension(extraUrl); } catch(e) {} } if (!blob) { const resp = await fetch(extraUrl); if (resp.ok) blob = await resp.blob(); } if (blob) { const newId = await storeImageBlob(extraUrl, blob); if (newId) extraImageIds.push(newId); } } catch(e) { console.warn('额外图片导入失败:', e.message); } } const cleanedTitle = cleanTitle(title); const newMagnet = { id: nextMagnetId++, magnetLink: magnetLink, videoUrl: videoUrl, title: cleanedTitle, imageUrl: finalImageUrl, extraImages: extraImageIds, messageUrl: src.messageUrl || '', fileId: fileId || '', fileIds: fileIds, size: size, tagIds: [], rating: 0, createdAt: Date.now() }; applyAutoTagsToMagnet(newMagnet); newMagnets.push(newMagnet); } if (newMagnets.length === 0) { showToast('没有新的磁力链接（可能均已存在）', true); return; } magnets.push(...newMagnets); await saveToDB(); updateFilteredList(); currentLoadedCount = 0; renderLoadedCards(); updateStats(allFilteredMagnets.length, magnets.length); const clearAfter = document.getElementById('clearAfterImport')?.checked ?? false; if (clearAfter) { try { await new Promise((resolve, reject) => { const handler = (event) => { if (event.data && event.data.type === 'CLEAR_PENDING_MAGNETS_RESULT') { window.removeEventListener('message', handler); if (event.data.success) { resolve(true); } else { reject(new Error(event.data.error || '清空失败')); } } }; window.addEventListener('message', handler); window.postMessage({ type: 'REQUEST_CLEAR_PENDING_MAGNETS' }, '*'); setTimeout(() => { window.removeEventListener('message', handler); reject(new Error('清空请求超时')); }, 5000); }); showToast(`✅ 从扩展成功导入 ${newMagnets.length} 条磁力，已清空队列`); } catch (err) { showToast(`✅ 从扩展成功导入 ${newMagnets.length} 条磁力，但清空队列失败`, true); } } else { showToast(`✅ 从扩展成功导入 ${newMagnets.length} 条磁力（保留队列）`); } } catch (err) { showToast('❌ 从扩展导入失败：' + err.message, true); } }
+    async function importFromExtension() { try { if (window.__MAGNET_HELPER_EXTENSION__) { await new Promise((resolve) => { const handler = (event) => { if (event.data && event.data.type === 'BOT_POLL_COMPLETE') { window.removeEventListener('message', handler); resolve(); } }; window.addEventListener('message', handler); window.postMessage({ type: 'REQUEST_BOT_POLL' }, '*'); setTimeout(() => { window.removeEventListener('message', handler); resolve(); }, 3000); }); } const result = await fetchPendingFromExtension(); if (!result.data || result.data.length === 0) { showToast('扩展队列为空', false); return; } const items = result.data.map(item => ({ title: item.title || '未知', magnetLink: item.magnet || '', videoUrl: item.videoUrl || '', size: item.size || '', imageUrl: item.imageUrl || '', extraImages: item.extraImages || [], messageUrl: item.messageUrl || '', fileId: item.fileId || '', fileIds: item.fileIds || [], restricted: item.restricted || false })); const newMagnets = []; for (const src of items) { const title = src.title || ''; const magnetLink = src.magnetLink || ''; const videoUrl = src.videoUrl || ''; const size = src.size || ''; const fileId = src.fileId || ''; const fileIds = src.fileIds || []; if (magnetLink && magnets.some(m => m.magnetLink && m.magnetLink.toLowerCase() === magnetLink.toLowerCase())) continue; if (videoUrl && magnets.some(m => m.videoUrl && m.videoUrl.toLowerCase() === videoUrl.toLowerCase())) continue; if (src.messageUrl && magnets.some(m => m.messageUrl && m.messageUrl === src.messageUrl)) continue; let finalImageUrl = src.imageUrl || ''; if (finalImageUrl && !finalImageUrl.startsWith('img_') && (finalImageUrl.startsWith('http://') || finalImageUrl.startsWith('https://'))) { try { let blob = null; if (window.__MAGNET_HELPER_EXTENSION__) { try { blob = await fetchImageViaExtension(finalImageUrl); } catch(e) {} } if (!blob) { const response = await fetch(finalImageUrl); if (response.ok) blob = await response.blob(); } if (blob) { const newId = await storeImageBlob(finalImageUrl, blob); if (newId) finalImageUrl = newId; } } catch(err) { console.warn('导入时图片处理失败:', err.message); } } let extraImageIds = []; for (const extraUrl of (src.extraImages || [])) { try { let blob = null; if (window.__MAGNET_HELPER_EXTENSION__) { try { blob = await fetchImageViaExtension(extraUrl); } catch(e) {} } if (!blob) { const resp = await fetch(extraUrl); if (resp.ok) blob = await resp.blob(); } if (blob) { const newId = await storeImageBlob(extraUrl, blob); if (newId) extraImageIds.push(newId); } } catch(e) { console.warn('额外图片导入失败:', e.message); } } const cleanedTitle = cleanTitle(title); const newMagnet = { id: nextMagnetId++, magnetLink: magnetLink, videoUrl: videoUrl, title: cleanedTitle, imageUrl: finalImageUrl, extraImages: extraImageIds, messageUrl: src.messageUrl || '', fileId: fileId || '', fileIds: fileIds, size: size, tagIds: [], rating: 0, createdAt: Date.now(), restricted: src.restricted || false }; applyAutoTagsToMagnet(newMagnet); newMagnets.push(newMagnet); } if (newMagnets.length === 0) { showToast('没有新的磁力链接（可能均已存在）', true); return; } magnets.push(...newMagnets); await saveToDB(); updateFilteredList(); currentLoadedCount = 0; renderLoadedCards(); updateStats(allFilteredMagnets.length, magnets.length); const clearAfter = document.getElementById('clearAfterImport')?.checked ?? false; if (clearAfter) { try { await new Promise((resolve, reject) => { const handler = (event) => { if (event.data && event.data.type === 'CLEAR_PENDING_MAGNETS_RESULT') { window.removeEventListener('message', handler); if (event.data.success) { resolve(true); } else { reject(new Error(event.data.error || '清空失败')); } } }; window.addEventListener('message', handler); window.postMessage({ type: 'REQUEST_CLEAR_PENDING_MAGNETS' }, '*'); setTimeout(() => { window.removeEventListener('message', handler); reject(new Error('清空请求超时')); }, 5000); }); showToast(`✅ 从扩展成功导入 ${newMagnets.length} 条磁力，已清空队列`); } catch (err) { showToast(`✅ 从扩展成功导入 ${newMagnets.length} 条磁力，但清空队列失败`, true); } } else { showToast(`✅ 从扩展成功导入 ${newMagnets.length} 条磁力（保留队列）`); } } catch (err) { showToast('❌ 从扩展导入失败：' + err.message, true); } }
     function startAutoImport() { const intervalInput = document.getElementById('autoImportInterval'); const minutes = parseFloat(intervalInput.value) || 10; if (minutes < 0.1) { alert('间隔至少 0.1 分钟'); return; } if (autoImportTimer) clearInterval(autoImportTimer); autoImportTimer = setInterval(() => { importFromExtension(); }, minutes * 60 * 1000); const toggleBtn = document.getElementById('autoImportToggleBtn'); if (toggleBtn) { toggleBtn.innerHTML = '<i class="fas fa-pause"></i> 停止'; toggleBtn.style.background = '#ef4444'; } document.getElementById('autoImportStatus').textContent = `⏳ 每 ${minutes} 分钟自动导入`; localStorage.setItem('autoImportRunning', 'true'); localStorage.setItem('autoImportInterval', String(minutes)); showToast(`自动导入已启动，间隔 ${minutes} 分钟`); }
     function stopAutoImport() { if (autoImportTimer) { clearInterval(autoImportTimer); autoImportTimer = null; } const toggleBtn = document.getElementById('autoImportToggleBtn'); if (toggleBtn) { toggleBtn.innerHTML = '<i class="fas fa-play"></i> 启动'; toggleBtn.style.background = '#10b981'; } document.getElementById('autoImportStatus').textContent = '已停止'; localStorage.setItem('autoImportRunning', 'false'); showToast('自动导入已停止'); }
     function toggleAutoImport() { if (autoImportTimer) { stopAutoImport(); } else { startAutoImport(); } }
@@ -3369,6 +3378,19 @@ function loginGDrive() {
         return links;
     }
 
+    function extractTelegramLinks(text) {
+        if (!text || typeof text !== 'string') return [];
+        const links = [];
+        const seen = new Set();
+        const re = /https?:\/\/(t\.me|telegram\.me)\/[a-zA-Z0-9_\/-]+/gi;
+        let match;
+        while ((match = re.exec(text)) !== null) {
+            const link = match[0].split('?')[0].replace(/\/+$/, '');
+            if (!seen.has(link)) { seen.add(link); links.push(link); }
+        }
+        return links;
+    }
+
     function magnetPreviewWithFallback(magnet) {
         return new Promise((resolve, reject) => {
             if (_ppBridgeMode === 'extension' && window.__MAGNET_HELPER_EXTENSION__) {
@@ -3397,9 +3419,13 @@ function loginGDrive() {
     const CLIPBOARD_ENABLED_KEY = 'clipboard_watch_enabled';
     const CLIPBOARD_IGNORE_KEY = 'clipboard_ignored_magnets';
     const CLIPBOARD_QUEUE_KEY = 'clipboard_magnet_queue';
+    const CLIPBOARD_TG_IGNORE_KEY = 'clipboard_ignored_tg_links';
+    const CLIPBOARD_TG_QUEUE_KEY = 'clipboard_tg_queue';
     let clipboardMagnetQueue = [];
     let clipboardMagnetProcessing = false;
     let clipboardMagnetLastFocusTime = 0;
+    let clipboardTgQueue = [];
+    let clipboardTgProcessing = false;
     const CLIPBOARD_FOCUS_COOLDOWN = 2500;
 
     function saveClipboardQueue() {
@@ -3437,6 +3463,37 @@ function loginGDrive() {
         localStorage.setItem(CLIPBOARD_IGNORE_KEY, JSON.stringify(ignored));
     }
 
+    function saveClipboardTgQueue() {
+        localStorage.setItem(CLIPBOARD_TG_QUEUE_KEY, JSON.stringify(clipboardTgQueue));
+    }
+    function loadClipboardTgQueue() {
+        try {
+            const saved = JSON.parse(localStorage.getItem(CLIPBOARD_TG_QUEUE_KEY) || '[]');
+            if (Array.isArray(saved)) clipboardTgQueue = saved;
+        } catch(e) {}
+    }
+
+    function getIgnoredTgLinks() {
+        try { return JSON.parse(localStorage.getItem(CLIPBOARD_TG_IGNORE_KEY) || '{}'); }
+        catch(e) { return {}; }
+    }
+
+    function isTgLinkIgnored(url) {
+        const ignored = getIgnoredTgLinks();
+        if (ignored[url]) {
+            if (Date.now() - ignored[url] < 5 * 60 * 1000) return true;
+            delete ignored[url];
+            localStorage.setItem(CLIPBOARD_TG_IGNORE_KEY, JSON.stringify(ignored));
+        }
+        return false;
+    }
+
+    function markTgLinkIgnored(url) {
+        const ignored = getIgnoredTgLinks();
+        ignored[url] = Date.now();
+        localStorage.setItem(CLIPBOARD_TG_IGNORE_KEY, JSON.stringify(ignored));
+    }
+
     async function clipboardMagnetReadClipboard() {
         if (!isClipboardWatchEnabled()) return;
         if (!navigator.clipboard) { console.debug('[剪贴板] clipboard API 不可用'); return; }
@@ -3447,22 +3504,37 @@ function loginGDrive() {
         try {
             const text = await navigator.clipboard.readText();
             if (!text || text.trim() === '') { console.debug('[剪贴板] 剪贴板为空'); return; }
-            const links = extractMagnetLinks(text);
-            if (links.length === 0) { console.debug('[剪贴板] 未找到磁力链接'); return; }
-            const newLinks = links.filter(link => {
+            // 检测磁力链接
+            const magnetLinks = extractMagnetLinks(text);
+            const newMagnets = magnetLinks.filter(link => {
                 const hash = (link.match(/btih:([a-fA-F0-9]{40})/i) || [])[1] || link;
                 return !isMagnetIgnored(hash);
             });
-            if (newLinks.length === 0) { console.debug('[剪贴板] 链接均已忽略'); return; }
-            clipboardMagnetLastFocusTime = Date.now();
-            for (const link of newLinks) {
-                if (!clipboardMagnetQueue.some(q => q.link === link)) {
-                    clipboardMagnetQueue.push(link);
-                    saveClipboardQueue();
+            if (newMagnets.length > 0) {
+                clipboardMagnetLastFocusTime = Date.now();
+                for (const link of newMagnets) {
+                    if (!clipboardMagnetQueue.some(q => q.link === link)) {
+                        clipboardMagnetQueue.push(link);
+                        saveClipboardQueue();
+                    }
                 }
+                showToast(`📋 检测到 ${newMagnets.length} 个磁力链接`);
+                processMagnetQueue();
             }
-            showToast(`📋 检测到 ${newLinks.length} 个磁力链接`);
-            processMagnetQueue();
+            // 检测 t.me 链接
+            const tgLinks = extractTelegramLinks(text);
+            const newTgLinks = tgLinks.filter(link => !isTgLinkIgnored(link));
+            if (newTgLinks.length > 0 && window.__MAGNET_HELPER_EXTENSION__) {
+                clipboardMagnetLastFocusTime = Date.now();
+                for (const link of newTgLinks) {
+                    if (!clipboardTgQueue.includes(link)) {
+                        clipboardTgQueue.push(link);
+                        saveClipboardTgQueue();
+                    }
+                }
+                showToast(`📨 检测到 ${newTgLinks.length} 个 Telegram 链接`);
+                processTgLinkQueue();
+            }
         } catch (err) {
             console.debug('[剪贴板] 读取失败:', err.name, err.message);
         }
@@ -3503,6 +3575,61 @@ function loginGDrive() {
         }
         clipboardMagnetProcessing = false;
         if (clipboardMagnetQueue.length > 0) processMagnetQueue();
+    }
+
+    function resolveTgLinkViaBridge(url) {
+        return new Promise((resolve, reject) => {
+            if (!window.__MAGNET_HELPER_EXTENSION__) {
+                reject(new Error('扩展未安装'));
+                return;
+            }
+            const handler = (event) => {
+                if (event.data && event.data.type === 'RESOLVE_TG_LINK_RESULT') {
+                    window.removeEventListener('message', handler);
+                    if (event.data.success) resolve({ message: event.data.message || '', pendingCreated: event.data.pendingCreated || false, restricted: event.data.restricted || false });
+                    else reject(new Error(event.data.error || '解析失败'));
+                }
+            };
+            window.addEventListener('message', handler);
+            window.postMessage({ type: 'REQUEST_RESOLVE_TG_LINK', url }, '*');
+            setTimeout(() => {
+                window.removeEventListener('message', handler);
+                reject(new Error('扩展未响应'));
+            }, 30000);
+        });
+    }
+
+    async function processTgLinkQueue() {
+        if (clipboardTgProcessing || clipboardTgQueue.length === 0) return;
+        clipboardTgProcessing = true;
+        while (clipboardTgQueue.length > 0) {
+            const url = clipboardTgQueue[0];
+            try {
+                const result = await resolveTgLinkViaBridge(url);
+                if (result.pendingCreated === false) {
+                    showToast(`📨 ${result.message || '该链接已在列表中'}`);
+                } else if (result.message) {
+                    showToast(`📨 ${result.message}${result.restricted ? ' 🔒 私密频道' : ''}`);
+                } else {
+                    showToast(`✅ Telegram 链接解析成功${result.restricted ? ' 🔒 私密频道' : ''}`);
+                }
+                markTgLinkIgnored(url);
+                clipboardTgQueue.shift();
+                saveClipboardTgQueue();
+                if (result.pendingCreated !== false) {
+                    setTimeout(() => {
+                        if (typeof importFromExtension === 'function') importFromExtension();
+                    }, 500);
+                }
+            } catch (err) {
+                showToast(`❌ 解析失败: ${err.message}`, true);
+                markTgLinkIgnored(url);
+                clipboardTgQueue.shift();
+                saveClipboardTgQueue();
+            }
+        }
+        clipboardTgProcessing = false;
+        if (clipboardTgQueue.length > 0) processTgLinkQueue();
     }
 
     function toggleClipboardWatch() {
@@ -3548,22 +3675,38 @@ function loginGDrive() {
             if (!isClipboardWatchEnabled()) return;
             const text = (e.clipboardData || window.clipboardData).getData('text');
             if (!text) return;
-            const links = extractMagnetLinks(text);
-            if (links.length === 0) return;
-            const newLinks = links.filter(link => {
+            // 磁力链接
+            const magnetLinks = extractMagnetLinks(text);
+            const newMagnets = magnetLinks.filter(link => {
                 const hash = (link.match(/btih:([a-fA-F0-9]{40})/i) || [])[1] || link;
                 return !isMagnetIgnored(hash);
             });
-            if (newLinks.length === 0) return;
-            for (const link of newLinks) {
-                if (!clipboardMagnetQueue.some(q => q.link === link)) {
-                    clipboardMagnetQueue.push(link);
-                    saveClipboardQueue();
+            if (newMagnets.length > 0) {
+                for (const link of newMagnets) {
+                    if (!clipboardMagnetQueue.some(q => q.link === link)) {
+                        clipboardMagnetQueue.push(link);
+                        saveClipboardQueue();
+                    }
                 }
+                showToast(`📋 检测到 ${newMagnets.length} 个磁力链接`);
+                processMagnetQueue();
             }
-            showToast(`📋 检测到 ${newLinks.length} 个磁力链接`);
-            processMagnetQueue();
+            // t.me 链接
+            const tgLinks = extractTelegramLinks(text);
+            const newTgLinks = tgLinks.filter(link => !isTgLinkIgnored(link));
+            if (newTgLinks.length > 0 && window.__MAGNET_HELPER_EXTENSION__) {
+                for (const link of newTgLinks) {
+                    if (!clipboardTgQueue.includes(link)) {
+                        clipboardTgQueue.push(link);
+                        saveClipboardTgQueue();
+                    }
+                }
+                showToast(`📨 检测到 ${newTgLinks.length} 个 Telegram 链接`);
+                processTgLinkQueue();
+            }
         });
+        loadClipboardTgQueue();
+        if (clipboardTgQueue.length > 0) processTgLinkQueue();
         updateClipboardWatchButton();
         console.log('[剪贴板] 监视已初始化');
         // 第一次加载延迟读取
@@ -3797,7 +3940,7 @@ async function renderLoadedCards() {
             const shortLink = m.magnetLink ? (m.magnetLink.length>45 ? m.magnetLink.substring(0,45)+'...' : m.magnetLink) : (m.videoUrl ? (m.videoUrl.length>45 ? m.videoUrl.substring(0,45)+'...' : m.videoUrl) : (m.messageUrl ? (m.messageUrl.length>45 ? m.messageUrl.substring(0,45)+'...' : m.messageUrl) : ''));
             const isLocal = m.imageUrl && m.imageUrl.startsWith('img_');
             const videoCount = (m.fileIds && m.fileIds.length) || (m.fileId ? 1 : 0);
-            const videoBadge = (m.videoUrl || videoCount > 0) ? `<span class="badge-video" style="font-size:0.7rem;background:#7c3aed;color:#fff;padding:1px 6px;border-radius:10px;">🎬 视频${videoCount > 1 ? '×' + videoCount : ''}</span>` : '';
+            const videoBadge = (m.videoUrl || videoCount > 0) ? `<span class="badge-video" style="font-size:0.85rem;background:#7c3aed;color:#fff;padding:2px 8px;border-radius:10px;">${m.restricted ? '🔒 ' : ''}🎬 视频${videoCount > 1 ? '×' + videoCount : ''}</span>` : '';
             const badge = videoBadge || (isLocal ? '<span class="local-badge" title="图片已保存到本地，永久有效"><i class="fas fa-database"></i> 本地</span>' : (m.imageUrl ? '<span class="net-badge" title="网络图片，可能失效"><i class="fas fa-globe"></i> 网络</span>' : ''));
             const imgUrl = m.imageUrl ? (m.imageUrl.startsWith('img_') ? '' : m.imageUrl) : '';
 const magnetLinkEl = m.magnetLink ? `<a href="${escapeHtml(m.magnetLink)}" class="magnet-link" data-magnet="${escapeHtml(m.magnetLink)}">🔗 ${escapeHtml(shortLink)}</a>` : (m.videoUrl ? `<div class="magnet-link" style="font-size:0.75rem;color:var(--text-secondary);word-break:break-all;">🔗 ${escapeHtml(shortLink)}</div>` : (m.messageUrl ? `<a href="${escapeHtml(m.messageUrl)}" class="magnet-link" target="_blank" rel="noopener noreferrer">📨 ${escapeHtml(shortLink)}</a>` : ''));
@@ -3893,11 +4036,16 @@ const magnetLinkEl = m.magnetLink ? `<a href="${escapeHtml(m.magnetLink)}" class
                 } else {
                     const card = magnets.find(m => m.id === id);
                     if (card) {
-                        try {
-                            await offlineCard(card);
-                            showToast('✅ 已发送到 PikPak');
-                        } catch (resolveErr) {
-                            showToast('❌ 离线失败: ' + resolveErr.message, true);
+                        if (card.restricted) {
+                            window.open(card.messageUrl, '_blank');
+                            showToast('已打开 Telegram 链接');
+                        } else {
+                            try {
+                                await offlineCard(card);
+                                showToast('✅ 已发送到 PikPak');
+                            } catch (resolveErr) {
+                                showToast('❌ 离线失败: ' + resolveErr.message, true);
+                            }
                         }
                     }
                 }

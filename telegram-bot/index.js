@@ -24,6 +24,7 @@ const API_HASH = process.env.API_HASH || '';
 const PENDING_FILE = path.join(__dirname, 'pending.json');
 const IMAGES_DIR = path.join(__dirname, 'images');
 const TARGET_BOT = process.env.TARGET_BOT_USERNAME || '@PikPak_Bot';
+const DOC_MAP_FILE = path.join(__dirname, 'docMap.json');
 
 if (!BOT_TOKEN) {
     console.error('❌ 缺少 BOT_TOKEN，请在 .env 中设置');
@@ -49,6 +50,52 @@ function loadFileMap() {
 
 function saveFileMap(map) {
     fs.writeFileSync(FILE_MAP_FILE, JSON.stringify(map, null, 2), 'utf-8');
+}
+// ===== docMap: 存储从 t.me 链接获取的 MTProto 文档信息（按需转发用） =====
+
+function loadDocMap() {
+    try {
+        if (!fs.existsSync(DOC_MAP_FILE)) return {};
+        return JSON.parse(fs.readFileSync(DOC_MAP_FILE, 'utf-8'));
+    } catch { return {}; }
+}
+
+function saveDocMap(map) {
+    fs.writeFileSync(DOC_MAP_FILE, JSON.stringify(map, null, 2), 'utf-8');
+}
+
+function addDocEntry(doc, { peer = '', msgId = 0 } = {}) {
+    const map = loadDocMap();
+    const id = uuidv4();
+    let fileName = '';
+    if (doc.attributes) {
+        for (const attr of doc.attributes) {
+            if (attr instanceof Api.DocumentAttributeFilename) {
+                fileName = attr.fileName;
+                break;
+            }
+        }
+    }
+    map[id] = {
+        id: String(doc.id),
+        accessHash: String(doc.accessHash),
+        fileReference: doc.fileReference ? doc.fileReference.toString('base64') : '',
+        fileName,
+        date: doc.date || 0,
+        size: String(doc.size || 0),
+        mimeType: doc.mimeType || '',
+        dcId: doc.dcId || 0,
+        peer,
+        msgId,
+    };
+    saveDocMap(map);
+    return id;
+}
+
+function removeDocEntry(id) {
+    const map = loadDocMap();
+    delete map[id];
+    saveDocMap(map);
 }
 
 // seqCounter: 用于相册多文件的时间戳消歧（递增序号）
@@ -216,6 +263,15 @@ function removePending(id) {
                 console.warn(`[removePending] 删除失败: ${e.message}`);
             }
         }
+        // 清理关联的 docMap 条目
+        const fIds = [...(item.fileIds || [])];
+        if (item.fileId && !fIds.includes(item.fileId)) fIds.push(item.fileId);
+        for (const fid of fIds) {
+            if (fid.startsWith('doc:')) {
+                removeDocEntry(fid.slice(4));
+                console.log(`[removePending] 已清理 docMap: ${fid.slice(4).substring(0, 8)}...`);
+            }
+        }
     } else {
         console.warn(`[removePending] 未找到条目: ${id}`);
     }
@@ -226,12 +282,28 @@ function removePending(id) {
 function cleanupOrphanImages() {
     const items = loadPending();
     const referenced = new Set();
+    const docRefs = new Set();
     for (const item of items) {
         const urls = [item.imageUrl, ...(item.extraImages || [])].filter(Boolean);
         for (const url of urls) {
             try { referenced.add(path.basename(new URL(url).pathname)); } catch (e) { /* ignore */ }
         }
+        const fIds = [...(item.fileIds || [])];
+        if (item.fileId && !fIds.includes(item.fileId)) fIds.push(item.fileId);
+        for (const fid of fIds) {
+            if (fid.startsWith('doc:')) docRefs.add(fid.slice(4));
+        }
     }
+    // 清理未被引用的 docMap 条目
+    const docMap = loadDocMap();
+    for (const key of Object.keys(docMap)) {
+        if (!docRefs.has(key)) {
+            delete docMap[key];
+            console.log(`[Bot] 清理未引用 docMap: ${key.substring(0, 8)}...`);
+        }
+    }
+    saveDocMap(docMap);
+    // 清理未被引用的图片
     if (!fs.existsSync(IMAGES_DIR)) return;
     for (const file of fs.readdirSync(IMAGES_DIR)) {
         if (!referenced.has(file)) {
@@ -256,6 +328,68 @@ async function downloadTelegramImage(fileId) {
     } catch (err) {
         console.warn('[Bot] 图片下载失败:', err.message);
         return null;
+    }
+}
+
+// ===== 解析 t.me 链接 =====
+function parseTgLink(url) {
+    if (!url) throw new Error('链接为空');
+    // 去掉查询参数和末尾斜杠
+    const clean = url.split('?')[0].replace(/\/+$/, '');
+    const m = clean.match(/https?:\/\/(?:t\.me|telegram\.me)\/c\/(\d+)\/(\d+)/);
+    if (m) return { peer: '-100' + m[1], msgId: parseInt(m[2]) };
+    const m2 = clean.match(/https?:\/\/(?:t\.me|telegram\.me)\/([a-zA-Z0-9_]+)\/(\d+)/);
+    if (m2) return { peer: m2[1], msgId: parseInt(m2[2]) };
+    throw new Error('无法解析 t.me 链接: ' + url);
+}
+
+// ===== 通过 gramjs 下载媒体（图片/缩略图）=====
+async function downloadMediaViaGramjs(client, msg, options = {}) {
+    try {
+        const data = await client.downloadMedia(msg, options);
+        if (!data) return null;
+        const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
+        if (buffer.length === 0) return null;
+        const filename = uuidv4() + '.jpg';
+        const filePath = path.join(IMAGES_DIR, filename);
+        fs.writeFileSync(filePath, buffer);
+        return `http://localhost:${PORT}/images/${filename}`;
+    } catch (err) {
+        console.warn('[Bot] gramjs 媒体下载失败:', err.message);
+        return null;
+    }
+}
+
+// ===== 发送 Document 到 @PikPakBot（通过 MTProto，不重新上传）=====
+async function sendDocumentToPikpak(client, doc, { retryAsUpload = true } = {}) {
+    const targetPeer = await client.getInputEntity(TARGET_BOT);
+    try {
+        const inputMedia = new Api.InputMediaDocument({
+            id: new Api.InputDocument({
+                id: doc.id,
+                accessHash: doc.accessHash,
+                fileReference: doc.fileReference,
+            }),
+        });
+        await client.invoke(new Api.messages.SendMedia({
+            peer: targetPeer,
+            media: inputMedia,
+            message: '',
+            randomId: BigInt(Math.floor(Math.random() * 1e15)),
+        }));
+    } catch (err) {
+        if (err.message && err.message.includes('CHAT_FORWARDS_RESTRICTED')) {
+            const url = doc.peer.startsWith('-100') ? `https://t.me/c/${doc.peer.slice(4)}/${doc.msgId}` : `https://t.me/${doc.peer}/${doc.msgId}`;
+            console.log(`[转发] 频道禁止转发，发送 t.me 链接到 ${TARGET_BOT}: ${url}`);
+            await client.invoke(new Api.messages.SendMessage({
+                peer: targetPeer,
+                message: url,
+                randomId: BigInt(Math.floor(Math.random() * 1e15)),
+            }));
+            console.log(`[转发] 链接已发送到 ${TARGET_BOT}`);
+            return;
+        }
+        throw err;
     }
 }
 
@@ -309,7 +443,7 @@ function extractVideoUrl(text) {
 
 // ===== 从消息/磁力提取标题 =====
 function extractTitle(text, magnetLink) {
-    if (!text && !magnetLink) return '未知资源';
+    if (!text && !magnetLink) return '';
     if (magnetLink) {
         const dn = magnetLink.match(/[?&]dn=([^&]+)/i);
         if (dn) {
@@ -324,7 +458,7 @@ function extractTitle(text, magnetLink) {
         const lines = clean.split('\n').map(l => l.trim()).filter(Boolean);
         if (lines.length > 0) return lines[0];
     }
-    return '未知资源';
+    return '';
 }
 
 // ===== 相册合并（media_group_id 缓冲） =====
@@ -738,13 +872,11 @@ app.post('/api/telethon/logout', async (req, res) => {
 });
 
 // ===== 转发消息到 @PikPakBot =====
+// 支持两种 fileId:
+//   - 普通 Bot API file_id（查 fileMap → findMtprotoMessage）
+//   - doc:uuid（查 docMap → 直接用存储的 MTProto 文档信息）
 app.post('/api/forward-to-pikpak/:fileId', async (req, res) => {
     const fileId = req.params.fileId;
-    const map = loadFileMap();
-    const entry = map[fileId];
-    if (!entry) {
-        return res.status(404).json({ error: '找不到该 file_id 对应的消息信息（Bot 重启后需重新发送视频）' });
-    }
 
     let client;
     try {
@@ -755,32 +887,168 @@ app.post('/api/forward-to-pikpak/:fileId', async (req, res) => {
             return res.status(401).json({ error: '用户 session 已过期，请重新登录' });
         }
 
+        if (fileId.startsWith('doc:')) {
+            const docId = fileId.slice(4);
+            const docMap = loadDocMap();
+            const docEntry = docMap[docId];
+            if (!docEntry) {
+                return res.status(404).json({ error: '文档信息已过期或不存在（请重新解析 t.me 链接）' });
+            }
+            await sendDocumentToPikpak(client, {
+                id: BigInt(docEntry.id),
+                accessHash: BigInt(docEntry.accessHash),
+                fileReference: Buffer.from(docEntry.fileReference, 'base64'),
+                fileName: docEntry.fileName || '',
+                peer: docEntry.peer || '',
+                msgId: docEntry.msgId || 0,
+                date: docEntry.date || 0,
+                mimeType: docEntry.mimeType || 'video/mp4',
+                size: docEntry.size || '0',
+                dcId: docEntry.dcId || 1,
+            });
+            removeDocEntry(docId);
+            console.log(`[转发] doc:${docId.substring(0, 8)}... → ${TARGET_BOT} 成功`);
+            res.json({ success: true });
+            return;
+        }
+
+        // 普通 Bot API file_id
+        const map = loadFileMap();
+        const entry = map[fileId];
+        if (!entry) {
+            return res.status(404).json({ error: '找不到该 file_id 对应的消息信息（Bot 重启后需重新发送视频）' });
+        }
+
         console.log(`[转发] ${fileId.substring(0, 20)}... → ${TARGET_BOT} (chatId=${entry.chatId}, msgId=${entry.messageId})`);
 
         // 通过时间戳查找正确的 MTProto 消息（Bot API msgId 和 MTProto msgId 不同）
         const msg = await findMtprotoMessage(fileId, entry);
 
         // 使用 InputMediaDocument 直接发送视频文件（跨对话，不重新上传）
-        const doc = msg.media.document;
-        const inputMedia = new Api.InputMediaDocument({
-            id: new Api.InputDocument({
-                id: doc.id,
-                accessHash: doc.accessHash,
-                fileReference: doc.fileReference,
-            }),
-        });
-        const targetPeer = await client.getInputEntity(TARGET_BOT);
-        await client.invoke(new Api.messages.SendMedia({
-            peer: targetPeer,
-            media: inputMedia,
-            message: '',
-            randomId: BigInt(Math.floor(Math.random() * 1e15)),
-        }));
+        await sendDocumentToPikpak(client, msg.media.document);
 
         console.log(`[转发] 成功: ${fileId.substring(0, 20)}...`);
         res.json({ success: true });
     } catch (err) {
         console.error(`[转发] 失败: ${err.message}`);
+        res.json({ success: false, error: err.message });
+    }
+});
+
+// ===== 解析 t.me 链接，抓取原文媒体并创建 pending =====
+app.post('/api/resolve-tg-link', async (req, res) => {
+    const { url } = req.body;
+    if (!url) return res.status(400).json({ error: '缺少 url' });
+
+    try {
+        const { peer, msgId } = parseTgLink(url);
+        console.log(`[解析TG] ${url} → peer="${peer}", msgId=${msgId}`);
+
+        const client = await getUserClient();
+        if (!client) return res.status(503).json({ error: '用户未登录，请先在 Telegram 页面登录' });
+        if (!client.connected) await client.connect();
+        if (!(await client.checkAuthorization())) {
+            return res.status(401).json({ error: '用户 session 已过期，请重新登录' });
+        }
+
+        const entity = await client.getInputEntity(peer);
+        const msgs = await client.getMessages(entity, { ids: [msgId] });
+        const msg = msgs[0];
+        if (!msg) return res.json({ success: false, error: '未找到消息' });
+
+        const restricted = !!(msg.noforwards || (msg._chat && msg._chat.noforwards));
+        console.log(`[解析TG] noforwards=${restricted} msg.noforwards=${!!msg.noforwards} chat.noforwards=${!!(msg._chat && msg._chat.noforwards)}`);
+
+        // 收集要处理的消息列表（支持相册）
+        let messages = [msg];
+        if (msg.groupedId) {
+            // 有相册组 ID，取附近消息找出同组所有成员
+            // 用 offsetId 获取目标消息前后共 30 条（确保包含同相册其他成员）
+            const msgIds = [];
+            for (let i = Math.max(1, msgId - 15); i <= msgId + 15; i++) msgIds.push(i);
+            const recent = await client.getMessages(entity, { ids: msgIds });
+            messages = recent.filter(m => m && String(m.groupedId) === String(msg.groupedId))
+                .sort((a, b) => Number(a.id) - Number(b.id));
+            console.log(`[解析TG] 检测到相册，共 ${messages.length} 条` + (messages.length > 1 ? ` (${messages[0].id}~${messages[messages.length-1].id})` : ''));
+        }
+
+        // 从所有相册消息中找文字
+        let text = '';
+        for (const m of messages) {
+            if (m.message) { text = m.message; break; }
+        }
+        text ||= msg.message || '';
+        const magnetLink = extractMagnet(text);
+        const title = extractTitle(text, magnetLink) || 'Telegram 消息';
+        const messageUrl = url;
+
+        let imageUrl = '';
+        let extraImages = [];
+        let videoCount = 0;
+        let fileIds = [];
+
+        for (const m of messages) {
+            if (!m.media) continue;
+
+            if (m.media.photo) {
+                const imgUrl = await downloadMediaViaGramjs(client, m);
+                if (imgUrl) {
+                    if (!imageUrl) imageUrl = imgUrl;
+                    else if (extraImages.length < 6) extraImages.push(imgUrl);
+                }
+            } else if (m.media.document) {
+                const doc = m.media.document;
+                if (!doc.mimeType?.startsWith('video/')) continue;
+
+                videoCount++;
+                const docId = addDocEntry(doc, { peer: String(peer), msgId: m.id });
+                fileIds.push('doc:' + docId);
+                // 下载最大尺寸缩略图
+                const thumbCount = (doc.thumbs || []).length;
+                for (let idx = thumbCount - 1; idx >= 0; idx--) {
+                    const thumbUrl = await downloadMediaViaGramjs(client, m, { thumb: idx });
+                    if (thumbUrl) {
+                        if (!imageUrl) { imageUrl = thumbUrl; }
+                        else if (extraImages.length < 6) extraImages.push(thumbUrl);
+                        break;
+                    }
+                }
+            }
+        }
+
+        // 如果已存在同 groupedId 的 pending card，跳过创建
+        const groupedId = msg.groupedId ? String(msg.groupedId) : '';
+        if (groupedId) {
+            const existing = loadPending().find(p => p.groupedId && String(p.groupedId) === groupedId);
+            if (existing) {
+                const vc = (existing.fileIds || []).length;
+                return res.json({ success: true, pendingCreated: false, message: `该相册已在列表中（${vc} 个视频）` });
+            }
+        }
+
+        const pendingMessage = videoCount > 0
+            ? `检测到 ${videoCount} 个视频，可点击离线按钮转发到 PikPak`
+            : (imageUrl ? '已获取图片' : '');
+        const type = magnetLink ? 'magnet' : 'video';
+
+        addPending({
+            type,
+            url: magnetLink || '',
+            title,
+            imageUrl,
+            extraImages,
+            messageUrl,
+            fileId: fileIds[0] || '',
+            fileIds,
+            groupedId,
+            restricted
+        });
+
+        console.log(`[解析TG] 成功: ${url} → ${title}${videoCount ? ' (转发' + videoCount + '视频)' : ''}${restricted ? ' [私密频道]' : ''}`);
+        res.json({ success: true, pendingCreated: true, message: pendingMessage, restricted });
+
+    } catch (err) {
+        console.error('[解析TG] 失败:', err.message);
         res.json({ success: false, error: err.message });
     }
 });

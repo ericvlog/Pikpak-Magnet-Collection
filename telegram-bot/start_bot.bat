@@ -10,7 +10,6 @@ echo [2/3] Wait port release...
 timeout /t 2 /nobreak >nul
 
 echo [3/3] Start Bot...
-echo     Log: %%TEMP%%\bot-start.log
-start /B node index.js > "%TEMP%\bot-start.log" 2>&1
+start "Telegram Bot" node index.js
 
-echo Bot started.
+echo Bot started at http://localhost:19876

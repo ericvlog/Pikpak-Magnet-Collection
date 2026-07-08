@@ -1340,6 +1340,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         messageUrl: item.messageUrl || '',
                         fileId: item.fileId || '',
                         fileIds: item.fileIds || [],
+                        restricted: item.restricted || false,
                         timestamp: item.timestamp || Date.now()
                     };
                     if (item.type === 'magnet') {
@@ -1538,6 +1539,29 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             } catch (err) {
                 console.error('[后台] resolveTgVideo 失败:', err.message);
                 sendResponse({ success: false, error: '解析失败: ' + err.message });
+            }
+        })();
+        return true;
+    }
+
+    // ===== 解析 t.me 链接（Bot 拉取原文并创建 pending） =====
+    if (request.action === 'resolveTgLink') {
+        const url = request.url;
+        console.log('[后台] resolveTgLink:', url);
+        (async () => {
+            try {
+                const cfg = await chrome.storage.local.get(['botPort']);
+                const port = cfg.botPort || 19876;
+                const resp = await fetch(`http://localhost:${port}/api/resolve-tg-link`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url }),
+                });
+                const data = await resp.json();
+                sendResponse({ success: data.success, error: data.error, message: data.message || '', pendingCreated: data.pendingCreated || false, restricted: data.restricted || false });
+            } catch (err) {
+                console.error('[后台] resolveTgLink 失败:', err.message);
+                sendResponse({ success: false, error: err.message });
             }
         })();
         return true;

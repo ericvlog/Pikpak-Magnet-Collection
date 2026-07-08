@@ -331,6 +331,14 @@ window.addEventListener('message', (event) => {
         });
     }
 
+    // --- 解析 t.me 链接（剪贴板监视用） ---
+    if (event.data.type === 'REQUEST_RESOLVE_TG_LINK') {
+        const url = event.data.url;
+        sendMessageToBackground({ action: 'resolveTgLink', url }, (response) => {
+            window.postMessage({ type: 'RESOLVE_TG_LINK_RESULT', success: response?.success || false, error: response?.error || '', message: response?.message || '', pendingCreated: response?.pendingCreated || false, restricted: response?.restricted || false }, '*');
+        });
+    }
+
     // --- 转发到 @PikPakBot ---
     if (event.data.type === 'REQUEST_FORWARD_TO_PIKPAK') {
         const fileId = event.data.fileId;

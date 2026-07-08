@@ -7,3 +7,4 @@ telegram-bot/.user_session
 telegram-bot/fileMap.json
 telegram-bot/pending.json
 telegram-bot/images/
+telegram-bot/docMap.json
