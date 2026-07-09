@@ -102,14 +102,30 @@ function removeDocEntry(id) {
 let seqCounter = 0;
 let seqCounterTs = 0;
 
-function addFileMapping(fileId, chatId, messageId, date) {
+function addFileMapping(fileId, chatId, messageId, date, sourcePeer, sourceMsgId) {
     const map = loadFileMap();
     const now = Date.now();
     if (now !== seqCounterTs) { seqCounter = 0; seqCounterTs = now; }
-    // tsOrder = 时间戳 + 序号（同一毫秒内的多个文件通过序号区分）
     const tsOrder = now + '.' + (seqCounter++);
     map[fileId] = { chatId, messageId, date, tsOrder };
+    if (sourcePeer) {
+        map[fileId].sourcePeer = sourcePeer;
+        map[fileId].sourceMsgId = sourceMsgId;
+    }
     saveFileMap(map);
+}
+
+// 从 Bot API 消息提取转发来源（用于 MTProto 直接取文档）
+function extractForwardSource(msg) {
+    const chat = msg.forward_from_chat;
+    const fwdMsgId = msg.forward_from_message_id;
+    if (chat && fwdMsgId) {
+        return {
+            sourcePeer: chat.username || String(chat.id),
+            sourceMsgId: fwdMsgId,
+        };
+    }
+    return {};
 }
 
 // 从 fileMap 条目找到正确的 MTProto 消息
@@ -119,36 +135,48 @@ async function findMtprotoMessage(fileId, entry) {
     if (!client.connected) await client.connect();
     if (!(await client.checkAuthorization())) throw new Error('session 已过期');
 
+    // 方式一（推荐）：有转发来源信息 → 直接从来源频道取文档
+    if (entry.sourcePeer && entry.sourceMsgId) {
+        try {
+            const sourcePeer = await client.getInputEntity(entry.sourcePeer);
+            const sourceMsgs = await client.getMessages(sourcePeer, { ids: [entry.sourceMsgId] });
+            const sourceMsg = sourceMsgs[0];
+            if (sourceMsg && sourceMsg.media && sourceMsg.media.document) {
+                console.log(`[查找] 来源频道直取: peer=${entry.sourcePeer} msgId=${entry.sourceMsgId} → MTProto ID=${sourceMsg.id}`);
+                const map = loadFileMap();
+                if (map[fileId]) { map[fileId].mtprotoId = sourceMsg.id; saveFileMap(map); }
+                return sourceMsg;
+            }
+        } catch (err) {
+            console.log(`[查找] 来源频道获取失败(${entry.sourcePeer}): ${err.message}`);
+        }
+    }
+
+    // 方式二：从 Bot 聊天记录按位置匹配
     const botPeer = await client.getInputEntity(BOT_USERNAME);
     const recent = await client.getMessages(botPeer, { limit: 200 });
-    // 只保留 document 类消息（video/document），排除 photo
     const docMsgs = recent.filter(m => m.media && m.media.document).sort((a, b) => a.id - b.id);
 
-    // 优先使用已缓存的 mtprotoId
     if (entry.mtprotoId) {
         const cached = docMsgs.find(m => m.id === entry.mtprotoId);
         if (cached) { console.log(`[查找] 缓存命中: MTProto ID=${cached.id}`); return cached; }
     }
 
-    // 按 Bot API messageId 顺序匹配 MTProto messageId 顺序
-    // docMsgs 只包含最近 200 条消息中的文档，因此只取最后 docMsgs.length 条 pending 条目做一对一匹配
     const allMap = loadFileMap();
     const pendingEntries = Object.entries(allMap)
         .filter(([k, v]) => !v.mtprotoId && v.messageId)
         .sort((a, b) => a[1].messageId - b[1].messageId);
 
-    // 只有最新的 docMsgs.length 条 pending 条目才能在 docMsgs 中有对应消息
     const visibleStart = Math.max(0, pendingEntries.length - docMsgs.length);
     const visibleIdx = pendingEntries.slice(visibleStart).findIndex(([fid]) => fid === fileId);
     if (visibleIdx >= 0) {
         const msg = docMsgs[visibleIdx];
-        console.log(`[查找] 顺序匹配: visibleIdx=${visibleIdx} visibleStart=${visibleStart} total=${pendingEntries.length} docMsgs=${docMsgs.length} → MTProto ID=${msg.id}`);
+        console.log(`[查找] 顺序匹配: visibleIdx=${visibleIdx} total=${pendingEntries.length} docMsgs=${docMsgs.length} → MTProto ID=${msg.id}`);
         const map = loadFileMap();
         if (map[fileId]) { map[fileId].mtprotoId = msg.id; saveFileMap(map); }
         return msg;
     }
 
-    // 终极降级：取最新一条 document（不缓存 mtprotoId，避免旧条目污染）
     const fallback = docMsgs[docMsgs.length - 1];
     if (fallback) {
         console.log(`[查找] 警告: ${fileId.substring(0, 20)}... 无法精确匹配，使用最新消息暂代: MTProto ID=${fallback.id}`);
@@ -625,7 +653,8 @@ bot.on(':video', async (ctx) => {
         console.log(`[Bot] 相册视频加入缓冲: ${msg.media_group_id}`);
         const fileId = video.file_id;
         console.log('[Bot] 相册视频 file_id:', fileId.substring(0, 20) + '...');
-        addFileMapping(fileId, msg.chat.id, msg.message_id, msg.date);
+        const src = extractForwardSource(msg);
+        addFileMapping(fileId, msg.chat.id, msg.message_id, msg.date, src.sourcePeer, src.sourceMsgId);
         bufferToAlbum(ctx, 'video', { thumbnail: video.thumbnail, file_name: video.file_name, fileId });
         return;
     }
@@ -633,7 +662,8 @@ bot.on(':video', async (ctx) => {
     console.log(`[Bot] 收到视频: ${video.file_name || '无文件名'} ${video.file_size ? '(' + (video.file_size / 1024 / 1024).toFixed(1) + ' MB)' : ''}`);
 
     const fileId = video.file_id;
-    addFileMapping(fileId, msg.chat.id, msg.message_id, msg.date);
+    const src = extractForwardSource(msg);
+    addFileMapping(fileId, msg.chat.id, msg.message_id, msg.date, src.sourcePeer, src.sourceMsgId);
     let title = (msg.caption || '').trim() || video.file_name || 'Telegram 视频';
     const captionMagnet = extractMagnet(msg.caption || '');
     if (captionMagnet) {
@@ -668,7 +698,8 @@ bot.on(':document', async (ctx) => {
     console.log(`[Bot] 收到视频文件: ${doc.file_name} ${doc.file_size ? '(' + (doc.file_size / 1024 / 1024).toFixed(1) + ' MB)' : ''}`);
 
     const fileId = doc.file_id;
-    addFileMapping(fileId, ctx.message.chat.id, ctx.message.message_id, ctx.message.date);
+    const src = extractForwardSource(ctx.message);
+    addFileMapping(fileId, ctx.message.chat.id, ctx.message.message_id, ctx.message.date, src.sourcePeer, src.sourceMsgId);
     const title = ctx.message.caption || doc.file_name || 'Telegram 视频文件';
     const messageUrl = extractPostLink(ctx);
 
