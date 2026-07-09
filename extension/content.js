@@ -71,7 +71,8 @@ window.addEventListener('message', (event) => {
     if (event.data.type === 'REQUEST_IMAGE_DOWNLOAD') {
         const url = event.data.url;
         const referer = event.data.referer || '';
-        console.log('[图片助手] 收到下载请求:', url, 'Referer:', referer);
+        const requestId = event.data.requestId || '';
+        console.log('[图片助手] 收到下载请求:', url, 'Referer:', referer, 'requestId:', requestId);
 
         sendMessageToBackground({ 
             action: 'downloadImage', 
@@ -79,7 +80,7 @@ window.addEventListener('message', (event) => {
             referer: referer
         }, (response) => {
             if (!response) {
-                window.postMessage({ type: 'IMAGE_DOWNLOAD_RESULT', success: false, error: '后台未返回有效响应' }, '*');
+                window.postMessage({ type: 'IMAGE_DOWNLOAD_RESULT', success: false, error: '后台未返回有效响应', requestId: requestId }, '*');
                 return;
             }
             if (response.success) {
@@ -90,9 +91,9 @@ window.addEventListener('message', (event) => {
                 }
                 const byteArray = new Uint8Array(byteNumbers);
                 const blob = new Blob([byteArray], { type: response.contentType });
-                window.postMessage({ type: 'IMAGE_DOWNLOAD_RESULT', success: true, blob: blob }, '*');
+                window.postMessage({ type: 'IMAGE_DOWNLOAD_RESULT', success: true, blob: blob, requestId: requestId }, '*');
             } else {
-                window.postMessage({ type: 'IMAGE_DOWNLOAD_RESULT', success: false, error: response.error || '未知错误' }, '*');
+                window.postMessage({ type: 'IMAGE_DOWNLOAD_RESULT', success: false, error: response.error || '未知错误', requestId: requestId }, '*');
             }
         });
     }

@@ -980,7 +980,7 @@
     async function getImageUrlForCard(magnet) { if (!magnet.imageUrl) return 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="200" viewBox="0 0 400 200"%3E%3Crect width="400" height="200" fill="%23e2e8f0"/%3E%3Ctext x="50%25" y="50%25" font-family="Arial" font-size="16" fill="%23475569" text-anchor="middle" dy=".3em"%3ENo Preview%3C/text%3E%3C/svg%3E'; if (magnet.imageUrl.startsWith('img_')) { const blob = await getImageBlob(magnet.imageUrl); if (blob) return URL.createObjectURL(blob); else return 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="200" viewBox="0 0 400 200"%3E%3Crect width="400" height="200" fill="%23e2e8f0"/%3E%3Ctext x="50%25" y="50%25" font-family="Arial" font-size="16" fill="%23475569" text-anchor="middle" dy=".3em"%3EMissing%3C/text%3E%3C/svg%3E'; } return magnet.imageUrl; }
 
     // ===== 扩展代理 & 图片保存 =====
-    function fetchImageViaExtension(url) { return new Promise((resolve, reject) => { if (!window.__MAGNET_HELPER_EXTENSION__) { reject(new Error('扩展未安装')); return; } const handler = (event) => { if (event.data.type === 'IMAGE_DOWNLOAD_RESULT') { window.removeEventListener('message', handler); if (event.data.success) { resolve(event.data.blob); } else { reject(new Error(event.data.error || '扩展下载失败')); } } }; window.addEventListener('message', handler); window.postMessage({ type: 'REQUEST_IMAGE_DOWNLOAD', url: url, referer: window.location.href }, '*'); setTimeout(() => { window.removeEventListener('message', handler); reject(new Error('扩展未响应，请检查扩展是否启用')); }, 15000); }); }
+    function fetchImageViaExtension(url) { return new Promise((resolve, reject) => { if (!window.__MAGNET_HELPER_EXTENSION__) { reject(new Error('扩展未安装')); return; } const requestId = 'img_' + Date.now() + '_' + Math.random().toString(36).substr(2, 8); const handler = (event) => { if (event.data && event.data.type === 'IMAGE_DOWNLOAD_RESULT' && event.data.requestId === requestId) { window.removeEventListener('message', handler); if (event.data.success) { resolve(event.data.blob); } else { reject(new Error(event.data.error || '扩展下载失败')); } } }; window.addEventListener('message', handler); window.postMessage({ type: 'REQUEST_IMAGE_DOWNLOAD', url: url, referer: window.location.href, requestId: requestId }, '*'); setTimeout(() => { window.removeEventListener('message', handler); reject(new Error('扩展未响应，请检查扩展是否启用')); }, 15000); }); }
     async function saveImageToLocal(magnetId, skipToast = false, retryOn429 = true) { const magnet = magnets.find(m => m.id === magnetId); if (!magnet || !magnet.imageUrl) { if(!skipToast) showToast('没有可保存的图片', true); return false; } if (magnet.imageUrl.startsWith('img_')) { if(!skipToast) showToast('图片已经是本地存储', false); return false; } let blob = null; let fromExtension = false; if (window.__MAGNET_HELPER_EXTENSION__) { try { if(!skipToast) showToast('使用扩展代理下载...', false); blob = await fetchImageViaExtension(magnet.imageUrl); fromExtension = true; } catch (extError) { if(!skipToast) showToast(`扩展代理失败: ${extError.message}，尝试标准下载`, true); } } if (!blob) { const fetchWithRetry = async (retry = true) => { const controller = new AbortController(); const timeoutId = setTimeout(() => controller.abort(), 30000); try { const response = await fetch(magnet.imageUrl, { mode: 'cors', referrerPolicy: 'unsafe-url', cache: 'reload', signal: controller.signal }); clearTimeout(timeoutId); if (!response.ok) { if (retry && response.status === 429) { await new Promise(r => setTimeout(r, 2000)); return fetchWithRetry(false); } throw new Error(`HTTP ${response.status} ${response.statusText}`); } const contentType = response.headers.get('content-type'); if (!contentType || !contentType.startsWith('image/')) throw new Error(`非图片类型: ${contentType}`); const responseBlob = await response.blob(); if (responseBlob.size === 0) throw new Error('图片大小为0'); return responseBlob; } catch(e) { clearTimeout(timeoutId); throw e; } }; try { blob = await fetchWithRetry(retryOn429); } catch (e) { let reason = e.message; if(!skipToast) showToast(`标准下载失败: ${reason}`, true); const existing = failList.find(f => f.cardId === magnetId); if (!existing) failList.push({ title: magnet.title, url: magnet.imageUrl, cardId: magnet.id, reason: reason }); else existing.reason = reason; await saveFailListToDB(); return false; } } try { const newId = await storeImageBlob(magnet.imageUrl, blob); if (newId) { magnet.imageUrl = newId; await saveToDB(); const idx = failList.findIndex(f => f.cardId === magnetId); if (idx !== -1) { failList.splice(idx, 1); await saveFailListToDB(); } updateFilteredList(); currentLoadedCount = 0; await renderLoadedCards(); updateStats(allFilteredMagnets.length, magnets.length); if(!skipToast) showToast('图片已保存到本地，链接永不过期' + (fromExtension ? ' (通过扩展代理)' : '')); return true; } else { throw new Error('存储到IndexedDB失败'); } } catch (e) { let reason = e.message; if(!skipToast) showToast(`存储失败: ${reason}`, true); const existing = failList.find(f => f.cardId === magnetId); if (!existing) failList.push({ title: magnet.title, url: magnet.imageUrl, cardId: magnet.id, reason: reason }); else existing.reason = reason; await saveFailListToDB(); return false; } }
 
     // ===== PikPak 桥接 + 直连 =====
@@ -3611,6 +3611,7 @@ function loginGDrive() {
     async function processTgLinkQueue() {
         if (clipboardTgProcessing || clipboardTgQueue.length === 0) return;
         clipboardTgProcessing = true;
+        let hasNew = false;
         while (clipboardTgQueue.length > 0) {
             const url = clipboardTgQueue[0];
             try {
@@ -3619,17 +3620,14 @@ function loginGDrive() {
                     showToast(`📨 ${result.message || '该链接已在列表中'}`);
                 } else if (result.message) {
                     showToast(`📨 ${result.message}${result.restricted ? ' 🔒 私密频道' : ''}`);
+                    if (result.pendingCreated !== false) hasNew = true;
                 } else {
                     showToast(`✅ Telegram 链接解析成功${result.restricted ? ' 🔒 私密频道' : ''}`);
+                    hasNew = true;
                 }
                 markTgLinkIgnored(url);
                 clipboardTgQueue.shift();
                 saveClipboardTgQueue();
-                if (result.pendingCreated !== false) {
-                    setTimeout(() => {
-                        if (typeof importFromExtension === 'function') importFromExtension();
-                    }, 500);
-                }
             } catch (err) {
                 showToast(`❌ 解析失败: ${err.message}`, true);
                 markTgLinkIgnored(url);
@@ -3639,6 +3637,9 @@ function loginGDrive() {
         }
         clipboardTgProcessing = false;
         if (clipboardTgQueue.length > 0) processTgLinkQueue();
+        if (hasNew && typeof importFromExtension === 'function') {
+            setTimeout(() => importFromExtension(), 800);
+        }
     }
 
     function toggleClipboardWatch() {

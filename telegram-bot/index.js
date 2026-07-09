@@ -274,9 +274,16 @@ function savePending(items) {
 
 function addPending(item) {
     const items = loadPending();
-    items.push({ id: uuidv4(), ...item, timestamp: Date.now() });
+    // 按 messageUrl 去重
+    if (item.messageUrl && items.some(p => p.messageUrl === item.messageUrl)) {
+        console.log(`[addPending] 跳过重复: messageUrl=${item.messageUrl.substring(0, 50)}`);
+        return null;
+    }
+    const entry = { id: uuidv4(), ...item, timestamp: Date.now() };
+    items.push(entry);
     while (items.length > 50) items.shift();
     savePending(items);
+    return entry;
 }
 
 function removePending(id) {
@@ -1054,6 +1061,13 @@ app.post('/api/resolve-tg-link', async (req, res) => {
                     }
                 }
             }
+        }
+
+        // 如果已存在同 messageUrl 的 pending card，跳过创建
+        const existingByUrl = loadPending().find(p => p.messageUrl === url);
+        if (existingByUrl) {
+            const vc = (existingByUrl.fileIds || []).length;
+            return res.json({ success: true, pendingCreated: false, message: `该链接已在列表中（${vc} 个视频）` });
         }
 
         // 如果已存在同 groupedId 的 pending card，跳过创建
