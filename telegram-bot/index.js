@@ -216,13 +216,7 @@ async function findMtprotoMessage(fileId, entry) {
         return msg;
     }
 
-    const fallback = docMsgs[docMsgs.length - 1];
-    if (fallback) {
-        console.log(`[查找] 警告: ${fileId.substring(0, 20)}... 无法精确匹配，使用最新消息暂代: MTProto ID=${fallback.id}`);
-        return fallback;
-    }
-
-    throw new Error('未找到匹配的消息');
+    throw new Error(`无法匹配到 ${fileId.substring(0, 20)}... 在 Bot 聊天记录中的位置，请删除该卡片后重新转发视频到 Bot`);
 }
 
 async function getUserClient() {
