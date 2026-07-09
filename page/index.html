@@ -868,9 +868,12 @@
         <div class="filter-bar">
             <input type="text" id="searchInput" placeholder="🔍 搜索标题或标签" style="width:200px">
             <div class="rating-filter"><span>评分筛选：</span><div class="star-filter" id="ratingFilter"><i data-rating="1" class="far fa-star"></i><i data-rating="2" class="far fa-star"></i><i data-rating="3" class="far fa-star"></i><i data-rating="4" class="far fa-star"></i><i data-rating="5" class="far fa-star"></i></div><button id="clearRatingFilter" class="btn-outline btn" style="padding:4px 12px;">清除</button></div>
-            <button id="filterNoTagBtn" class="btn btn-outline" style="padding:3px 10px;font-size:0.75rem;white-space:nowrap;">🏷 无标签</button>
-            <button id="filterNetImgBtn" class="btn btn-outline" style="padding:3px 10px;font-size:0.75rem;white-space:nowrap;">🌐 网络图</button>
-
+            <select id="filterTypeSelect" style="padding:3px 8px;font-size:0.8rem;border-radius:6px;border:1px solid #555;background:var(--card-bg);color:var(--text-color);cursor:pointer;">
+                <option value="all">📋 全部卡片</option>
+                <option value="noTag">🏷 无标签</option>
+                <option value="netImg">🌐 网络图</option>
+                <option value="telegram">📱 电报卡片</option>
+            </select>
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:nowrap;"><span style="font-size:0.8rem;white-space:nowrap;">每次加载</span><select id="pageSizeSelect" style="width:65px;"><option value="20">20</option><option value="50" selected>50</option><option value="100">100</option><option value="200">200</option></select></div>
             <button id="resetFilterBtn" class="btn btn-outline" style="white-space:nowrap;">重置</button><div id="statsDisplay" class="stats-badge">📊 0 张卡片</div>
         </div>
@@ -918,8 +921,7 @@
     let failList = [];
     let nextTagId = 4, nextMagnetId = 1;
     let currentRatingFilter = 0;
-    let filterNoTag = false;
-    let filterNetImg = false;
+    let filterType = 'all';
     let collapsedTags = false;
     let selectionMode = false;
     let selectedCardIds = new Set();
@@ -3913,8 +3915,12 @@ function updateFilteredList() {
                 if (!titleMatch && !tagMatch) return false;
             }
             if (currentRatingFilter>0 && m.rating!==currentRatingFilter) return false;
-            if (filterNoTag && m.tagIds && m.tagIds.length > 0) return false;
-            if (filterNetImg && (!m.imageUrl || m.imageUrl.startsWith('img_'))) return false;
+            if (filterType === 'noTag' && m.tagIds && m.tagIds.length > 0) return false;
+            if (filterType === 'netImg' && (!m.imageUrl || m.imageUrl.startsWith('img_'))) return false;
+            if (filterType === 'telegram') {
+                const hasTelegram = m.fileId || (m.fileIds && m.fileIds.length > 0) || m.messageUrl;
+                if (!hasTelegram) return false;
+            }
             return true;
         });
         filtered.sort((a,b) => (b.createdAt||0)-(a.createdAt||0));
@@ -4113,19 +4119,17 @@ const magnetLinkEl = m.magnetLink ? `<a href="${escapeHtml(m.magnetLink)}" class
             renderLoadedCards();
             updateStats(allFilteredMagnets.length, magnets.length);
         });
-        function toggleFilter(btn, varName) {
-            const val = !eval(varName);
-            eval(varName + ' = val');
-            btn.classList.toggle('active', val);
-            btn.style.background = val ? 'var(--stats-badge-bg)' : '';
-            btn.style.color = val ? 'var(--stats-badge-text)' : '';
+        function applyFilter(type) {
+            filterType = type;
+            document.getElementById('filterTypeSelect').value = type;
             updateFilteredList();
             currentLoadedCount = 0;
             renderLoadedCards();
             updateStats(allFilteredMagnets.length, magnets.length);
         }
-        document.getElementById('filterNoTagBtn').onclick = function() { toggleFilter(this, 'filterNoTag'); };
-        document.getElementById('filterNetImgBtn').onclick = function() { toggleFilter(this, 'filterNetImg'); };
+        document.getElementById('filterTypeSelect').onchange = function() {
+            applyFilter(this.value);
+        };
     }
 
     async function deleteAllFailCards() {
@@ -4315,14 +4319,8 @@ const magnetLinkEl = m.magnetLink ? `<a href="${escapeHtml(m.magnetLink)}" class
             document.getElementById('searchInput').value = '';
             currentRatingFilter = 0;
             updateRatingFilterUI();
-            filterNoTag = false;
-            filterNetImg = false;
-            document.getElementById('filterNoTagBtn').classList.remove('active');
-            document.getElementById('filterNoTagBtn').style.background = '';
-            document.getElementById('filterNoTagBtn').style.color = '';
-            document.getElementById('filterNetImgBtn').classList.remove('active');
-            document.getElementById('filterNetImgBtn').style.background = '';
-            document.getElementById('filterNetImgBtn').style.color = '';
+            filterType = 'all';
+            document.getElementById('filterTypeSelect').value = 'all';
             updateFilteredList();
             currentLoadedCount = 0;
             renderLoadedCards();
