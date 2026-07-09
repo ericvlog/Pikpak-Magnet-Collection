@@ -98,14 +98,17 @@ function removeDocEntry(id) {
     saveDocMap(map);
 }
 
-// seqCounter: 用于相册多文件的时间戳消歧（递增序号）
+// seqCounter: 用于相册多文件的时间戳消歧（递增序号，每 ms 重置）
 let seqCounter = 0;
+let seqCounterTs = 0;
 
-function addFileMapping(fileId, chatId, messageId) {
+function addFileMapping(fileId, chatId, messageId, date) {
     const map = loadFileMap();
-    // tsOrder = 时间戳 + 序号（精确到微秒级别，同一毫秒内的多个文件通过序号区分）
-    const tsOrder = Date.now() + '.' + (seqCounter++);
-    map[fileId] = { chatId, messageId, tsOrder };
+    const now = Date.now();
+    if (now !== seqCounterTs) { seqCounter = 0; seqCounterTs = now; }
+    // tsOrder = 时间戳 + 序号（同一毫秒内的多个文件通过序号区分）
+    const tsOrder = now + '.' + (seqCounter++);
+    map[fileId] = { chatId, messageId, date, tsOrder };
     saveFileMap(map);
 }
 
@@ -127,45 +130,56 @@ async function findMtprotoMessage(fileId, entry) {
         if (cached) { console.log(`[查找] 缓存命中: MTProto ID=${cached.id}`); return cached; }
     }
 
-    if (entry.tsOrder) {
-        const dotIdx = entry.tsOrder.indexOf('.');
-        const tsPart = dotIdx > 0 ? parseFloat(entry.tsOrder.substring(0, dotIdx)) : parseFloat(entry.tsOrder);
-        const seqPart = dotIdx > 0 ? parseInt(entry.tsOrder.substring(dotIdx + 1), 10) : 0;
-        if (!isNaN(tsPart)) {
-            const windowMsgs = docMsgs.filter(m => Math.abs(m.date * 1000 - tsPart) < 5000);
-            if (windowMsgs.length > 0) {
-                const idx = seqPart < windowMsgs.length ? seqPart : (seqPart % windowMsgs.length);
-                const msg = windowMsgs[idx];
-                console.log(`[查找] tsOrder 匹配: seq=${seqPart} window=${windowMsgs.length} idx=${idx} → MTProto ID=${msg.id}`);
+    // 优先使用 date（Bot API 消息时间）匹配，更可靠
+    // 所有 pending 条目按 date 分组 → 按 messageId 排序 → 对应 docMsgs 位置
+    const matchTs = entry.date || (() => {
+        if (entry.tsOrder) {
+            const dotIdx = entry.tsOrder.indexOf('.');
+            return dotIdx > 0 ? parseFloat(entry.tsOrder.substring(0, dotIdx)) : 0;
+        }
+        return 0;
+    })();
+
+    if (matchTs) {
+        // 收集同时间窗口的所有 pending 条目
+        const allMap = loadFileMap();
+        const pendingBatch = Object.entries(allMap)
+            .filter(([k, v]) => !v.mtprotoId && v.messageId)
+            .filter(([k, v]) => {
+                const t = v.date || (v.tsOrder ? parseFloat(v.tsOrder.split('.')[0]) : 0);
+                return Math.abs(t - matchTs) < 5000;
+            })
+            .sort((a, b) => a[1].messageId - b[1].messageId); // Bot API msgId 升序
+
+        // 同时间窗口的 MTProto 消息
+        const windowMsgs = docMsgs.filter(m => Math.abs(m.date * 1000 - matchTs) < 5000).sort((a, b) => a.id - b.id);
+
+        if (windowMsgs.length > 0 && pendingBatch.length > 0) {
+            const pendingIdx = pendingBatch.findIndex(([fid]) => fid === fileId);
+            if (pendingIdx >= 0 && pendingIdx < windowMsgs.length) {
+                const msg = windowMsgs[pendingIdx];
+                console.log(`[查找] 时间窗口匹配: date=${entry.date || 'tsOrder'} pendingIdx=${pendingIdx} window=${windowMsgs.length} batch=${pendingBatch.length} → MTProto ID=${msg.id}`);
                 const map = loadFileMap();
                 if (map[fileId]) { map[fileId].mtprotoId = msg.id; saveFileMap(map); }
                 return msg;
             }
-        }
-    }
-
-    // 降级：无 tsOrder 的旧记录 → 按 messageId 顺序在 docMsgs 中定位
-    // 获取所有 fileMap 条目（排除已匹配的）
-    const allMap = loadFileMap();
-    const pendingEntries = Object.entries(allMap)
-        .filter(([k, v]) => !v.mtprotoId && v.messageId)
-        .sort((a, b) => a[1].messageId - b[1].messageId); // Bot API msgId 升序
-
-    // 在 pendingEntries 中查找当前 fileId 的位置
-    const pendingIdx = pendingEntries.findIndex(([fid]) => fid === fileId);
-    if (pendingIdx >= 0 && pendingIdx < docMsgs.length) {
-        const msgIdx = docMsgs.length - pendingEntries.length + pendingIdx;
-        if (msgIdx >= 0 && msgIdx < docMsgs.length) {
-            const msg = docMsgs[msgIdx];
-            console.log(`[查找] 位置匹配: msgIdx=${msgIdx} pendingIdx=${pendingIdx} total=${pendingEntries.length} docMsgs=${docMsgs.length} → MTProto ID=${msg.id}`);
-            const map2 = loadFileMap();
-            if (map2[fileId]) {
-                map2[fileId].mtprotoId = msg.id;
-                saveFileMap(map2);
-                return msg;
+            if (pendingBatch.length > windowMsgs.length) {
+                // window 放不下时，用 tsOrder 的 seqPart 做模运算分散
+                if (entry.tsOrder) {
+                    const dotIdx = entry.tsOrder.indexOf('.');
+                    const seqPart = dotIdx > 0 ? parseInt(entry.tsOrder.substring(dotIdx + 1), 10) : 0;
+                    const idx = seqPart % windowMsgs.length;
+                    const msg = windowMsgs[idx];
+                    console.log(`[查找] 时间窗口溢出: pending=${pendingBatch.length} window=${windowMsgs.length} seqPart=${seqPart} idx=${idx} → MTProto ID=${msg.id}`);
+                    const map = loadFileMap();
+                    if (map[fileId]) { map[fileId].mtprotoId = msg.id; saveFileMap(map); }
+                    return msg;
+                }
             }
         }
     }
+
+    // 不再需要独立的 tsOrder 和位置匹配降级逻辑（已统一到时间窗口匹配）
 
     // 终极降级：取最新一条 document
     const fallback = docMsgs[docMsgs.length - 1];
@@ -646,7 +660,7 @@ bot.on(':video', async (ctx) => {
         console.log(`[Bot] 相册视频加入缓冲: ${msg.media_group_id}`);
         const fileId = video.file_id;
         console.log('[Bot] 相册视频 file_id:', fileId.substring(0, 20) + '...');
-        addFileMapping(fileId, msg.chat.id, msg.message_id);
+        addFileMapping(fileId, msg.chat.id, msg.message_id, msg.date);
         bufferToAlbum(ctx, 'video', { thumbnail: video.thumbnail, file_name: video.file_name, fileId });
         return;
     }
@@ -654,8 +668,7 @@ bot.on(':video', async (ctx) => {
     console.log(`[Bot] 收到视频: ${video.file_name || '无文件名'} ${video.file_size ? '(' + (video.file_size / 1024 / 1024).toFixed(1) + ' MB)' : ''}`);
 
     const fileId = video.file_id;
-    addFileMapping(fileId, msg.chat.id, msg.message_id);
-
+    addFileMapping(fileId, msg.chat.id, msg.message_id, msg.date);
     let title = (msg.caption || '').trim() || video.file_name || 'Telegram 视频';
     const captionMagnet = extractMagnet(msg.caption || '');
     if (captionMagnet) {
@@ -690,8 +703,7 @@ bot.on(':document', async (ctx) => {
     console.log(`[Bot] 收到视频文件: ${doc.file_name} ${doc.file_size ? '(' + (doc.file_size / 1024 / 1024).toFixed(1) + ' MB)' : ''}`);
 
     const fileId = doc.file_id;
-    addFileMapping(fileId, ctx.message.chat.id, ctx.message.message_id);
-
+    addFileMapping(fileId, ctx.message.chat.id, ctx.message.message_id, ctx.message.date);
     const title = ctx.message.caption || doc.file_name || 'Telegram 视频文件';
     const messageUrl = extractPostLink(ctx);
 
