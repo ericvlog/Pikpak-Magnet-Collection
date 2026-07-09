@@ -134,9 +134,9 @@ async function findMtprotoMessage(fileId, entry) {
         if (!isNaN(tsPart)) {
             const windowMsgs = docMsgs.filter(m => Math.abs(m.date * 1000 - tsPart) < 5000);
             if (windowMsgs.length > 0) {
-                const idx = Math.min(seqPart, windowMsgs.length - 1);
+                const idx = seqPart < windowMsgs.length ? seqPart : (seqPart % windowMsgs.length);
                 const msg = windowMsgs[idx];
-                console.log(`[查找] tsOrder 匹配: seq=${seqPart} window=${windowMsgs.length} → MTProto ID=${msg.id}`);
+                console.log(`[查找] tsOrder 匹配: seq=${seqPart} window=${windowMsgs.length} idx=${idx} → MTProto ID=${msg.id}`);
                 const map = loadFileMap();
                 if (map[fileId]) { map[fileId].mtprotoId = msg.id; saveFileMap(map); }
                 return msg;
@@ -151,24 +151,19 @@ async function findMtprotoMessage(fileId, entry) {
         .filter(([k, v]) => !v.mtprotoId && v.messageId)
         .sort((a, b) => a[1].messageId - b[1].messageId); // Bot API msgId 升序
 
-    // 如果 docMsgs 数量 ≥ pendingEntries 数量，按顺序一一对应
-    // pendingEntries[0] → docMsgs[docMsgs.length - pendingEntries.length + 0]
-    // pendingEntries[N] → docMsgs[docMsgs.length - pendingEntries.length + N]
-    if (pendingEntries.length > 0 && pendingEntries.length <= docMsgs.length) {
-        for (let i = 0; i < pendingEntries.length; i++) {
-            const [fid, ent] = pendingEntries[i];
-            const msgIdx = docMsgs.length - pendingEntries.length + i;
+    // 在 pendingEntries 中查找当前 fileId 的位置
+    const pendingIdx = pendingEntries.findIndex(([fid]) => fid === fileId);
+    if (pendingIdx >= 0 && pendingIdx < docMsgs.length) {
+        const msgIdx = docMsgs.length - pendingEntries.length + pendingIdx;
+        if (msgIdx >= 0 && msgIdx < docMsgs.length) {
             const msg = docMsgs[msgIdx];
+            console.log(`[查找] 位置匹配: msgIdx=${msgIdx} pendingIdx=${pendingIdx} total=${pendingEntries.length} docMsgs=${docMsgs.length} → MTProto ID=${msg.id}`);
             const map2 = loadFileMap();
-            if (map2[fid]) {
-                map2[fid].mtprotoId = msg.id;
-                if (fid === fileId) {
-                    console.log(`[查找] 位置匹配: msgIdx=${msgIdx} pendingIdx=${i} total=${pendingEntries.length} docMsgs=${docMsgs.length} → MTProto ID=${msg.id}`);
-                    saveFileMap(map2);
-                    return msg;
-                }
+            if (map2[fileId]) {
+                map2[fileId].mtprotoId = msg.id;
+                saveFileMap(map2);
+                return msg;
             }
-            saveFileMap(map2);
         }
     }
 
