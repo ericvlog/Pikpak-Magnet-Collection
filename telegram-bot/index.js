@@ -128,6 +128,20 @@ function extractForwardSource(msg) {
     return {};
 }
 
+// 从 t.me 链接解析来源频道和消息 ID（兼容新旧格式）
+function parseMessageUrl(url) {
+    if (!url) return {};
+    const m = url.match(/https:\/\/t\.me\/(?:c\/)?([^\/\?]+)\/(\d+)/);
+    if (!m) return {};
+    const peer = m[1];
+    const msgId = parseInt(m[2], 10);
+    if (/^\d+$/.test(peer)) {
+        // 私密频道：恢复 -100 前缀（存为字符串，getInputEntity 时转 BigInt）
+        return { sourcePeer: '-100' + peer, sourceMsgId: msgId };
+    }
+    return { sourcePeer: peer, sourceMsgId: msgId };
+}
+
 // 从 fileMap 条目找到正确的 MTProto 消息
 async function findMtprotoMessage(fileId, entry) {
     const client = await getUserClient();
@@ -135,10 +149,35 @@ async function findMtprotoMessage(fileId, entry) {
     if (!client.connected) await client.connect();
     if (!(await client.checkAuthorization())) throw new Error('session 已过期');
 
+    // 尝试从 messageUrl 恢复 source 信息（兼容旧条目）
+    if (!entry.sourcePeer && !entry.sourceMsgId) {
+        const pendingList = loadPending();
+        for (const p of pendingList) {
+            if (p.fileIds && p.fileIds.includes(fileId) && p.messageUrl) {
+                const parsed = parseMessageUrl(p.messageUrl);
+                if (parsed.sourcePeer && parsed.sourceMsgId) {
+                    const map = loadFileMap();
+                    if (map[fileId]) {
+                        map[fileId].sourcePeer = parsed.sourcePeer;
+                        map[fileId].sourceMsgId = parsed.sourceMsgId;
+                        entry.sourcePeer = parsed.sourcePeer;
+                        entry.sourceMsgId = parsed.sourceMsgId;
+                        saveFileMap(map);
+                        console.log(`[查找] 从 messageUrl 恢复来源: peer=${parsed.sourcePeer} msgId=${parsed.sourceMsgId}`);
+                    }
+                }
+                break;
+            }
+        }
+    }
+
     // 方式一（推荐）：有转发来源信息 → 直接从来源频道取文档
     if (entry.sourcePeer && entry.sourceMsgId) {
         try {
-            const sourcePeer = await client.getInputEntity(entry.sourcePeer);
+            // 数字频道 ID 转 BigInt（getInputEntity 需要），用户名保持字符串
+            const isNumeric = /^-?\d+$/.test(String(entry.sourcePeer));
+            const peerInput = isNumeric ? BigInt(entry.sourcePeer) : entry.sourcePeer;
+            const sourcePeer = await client.getInputEntity(peerInput);
             const sourceMsgs = await client.getMessages(sourcePeer, { ids: [entry.sourceMsgId] });
             const sourceMsg = sourceMsgs[0];
             if (sourceMsg && sourceMsg.media && sourceMsg.media.document) {
