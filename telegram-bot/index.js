@@ -320,15 +320,7 @@ function removePending(id) {
                 console.warn(`[removePending] 删除失败: ${e.message}`);
             }
         }
-        // 清理关联的 docMap 条目
-        const fIds = [...(item.fileIds || [])];
-        if (item.fileId && !fIds.includes(item.fileId)) fIds.push(item.fileId);
-        for (const fid of fIds) {
-            if (fid.startsWith('doc:')) {
-                removeDocEntry(fid.slice(4));
-                console.log(`[removePending] 已清理 docMap: ${fid.slice(4).substring(0, 8)}...`);
-            }
-        }
+        // docMap 条目保留不删（供已导入卡片离线转发时使用）
     } else {
         console.warn(`[removePending] 未找到条目: ${id}`);
     }
@@ -339,27 +331,13 @@ function removePending(id) {
 function cleanupOrphanImages() {
     const items = loadPending();
     const referenced = new Set();
-    const docRefs = new Set();
     for (const item of items) {
         const urls = [item.imageUrl, ...(item.extraImages || [])].filter(Boolean);
         for (const url of urls) {
             try { referenced.add(path.basename(new URL(url).pathname)); } catch (e) { /* ignore */ }
         }
-        const fIds = [...(item.fileIds || [])];
-        if (item.fileId && !fIds.includes(item.fileId)) fIds.push(item.fileId);
-        for (const fid of fIds) {
-            if (fid.startsWith('doc:')) docRefs.add(fid.slice(4));
-        }
     }
-    // 清理未被引用的 docMap 条目
-    const docMap = loadDocMap();
-    for (const key of Object.keys(docMap)) {
-        if (!docRefs.has(key)) {
-            delete docMap[key];
-            console.log(`[Bot] 清理未引用 docMap: ${key.substring(0, 8)}...`);
-        }
-    }
-    saveDocMap(docMap);
+    // docMap 条目保留不删（供已导入卡片离线转发时使用）
     // 清理未被引用的图片
     if (!fs.existsSync(IMAGES_DIR)) return;
     for (const file of fs.readdirSync(IMAGES_DIR)) {
