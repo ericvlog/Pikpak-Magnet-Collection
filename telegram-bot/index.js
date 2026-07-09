@@ -130,56 +130,32 @@ async function findMtprotoMessage(fileId, entry) {
         if (cached) { console.log(`[查找] 缓存命中: MTProto ID=${cached.id}`); return cached; }
     }
 
-    // 优先使用 date（Bot API 消息时间）匹配，更可靠
-    // 所有 pending 条目按 date 分组 → 按 messageId 排序 → 对应 docMsgs 位置
-    const matchTs = entry.date || (() => {
-        if (entry.tsOrder) {
-            const dotIdx = entry.tsOrder.indexOf('.');
-            return dotIdx > 0 ? parseFloat(entry.tsOrder.substring(0, dotIdx)) : 0;
+    // 按 Bot API messageId 顺序匹配 MTProto messageId 顺序
+    // pendingEntries[0] → docMsgs[docMsgs.length - pendingEntries.length + 0]
+    // pendingEntries[N] → docMsgs[docMsgs.length - pendingEntries.length + N]
+    const allMap = loadFileMap();
+    const pendingEntries = Object.entries(allMap)
+        .filter(([k, v]) => !v.mtprotoId && v.messageId)
+        .sort((a, b) => a[1].messageId - b[1].messageId);
+
+    const pendingIdx = pendingEntries.findIndex(([fid]) => fid === fileId);
+    if (pendingIdx >= 0) {
+        if (pendingEntries.length <= docMsgs.length) {
+            const msgIdx = docMsgs.length - pendingEntries.length + pendingIdx;
+            const msg = docMsgs[msgIdx];
+            console.log(`[查找] 顺序匹配: pendingIdx=${pendingIdx} msgIdx=${msgIdx} total=${pendingEntries.length} docMsgs=${docMsgs.length} → MTProto ID=${msg.id}`);
+            const map = loadFileMap();
+            if (map[fileId]) { map[fileId].mtprotoId = msg.id; saveFileMap(map); }
+            return msg;
         }
-        return 0;
-    })();
-
-    if (matchTs) {
-        // 收集同时间窗口的所有 pending 条目
-        const allMap = loadFileMap();
-        const pendingBatch = Object.entries(allMap)
-            .filter(([k, v]) => !v.mtprotoId && v.messageId)
-            .filter(([k, v]) => {
-                const t = v.date || (v.tsOrder ? parseFloat(v.tsOrder.split('.')[0]) : 0);
-                return Math.abs(t - matchTs) < 5000;
-            })
-            .sort((a, b) => a[1].messageId - b[1].messageId); // Bot API msgId 升序
-
-        // 同时间窗口的 MTProto 消息
-        const windowMsgs = docMsgs.filter(m => Math.abs(m.date * 1000 - matchTs) < 5000).sort((a, b) => a.id - b.id);
-
-        if (windowMsgs.length > 0 && pendingBatch.length > 0) {
-            const pendingIdx = pendingBatch.findIndex(([fid]) => fid === fileId);
-            if (pendingIdx >= 0 && pendingIdx < windowMsgs.length) {
-                const msg = windowMsgs[pendingIdx];
-                console.log(`[查找] 时间窗口匹配: date=${entry.date || 'tsOrder'} pendingIdx=${pendingIdx} window=${windowMsgs.length} batch=${pendingBatch.length} → MTProto ID=${msg.id}`);
-                const map = loadFileMap();
-                if (map[fileId]) { map[fileId].mtprotoId = msg.id; saveFileMap(map); }
-                return msg;
-            }
-            if (pendingBatch.length > windowMsgs.length) {
-                // window 放不下时，用 tsOrder 的 seqPart 做模运算分散
-                if (entry.tsOrder) {
-                    const dotIdx = entry.tsOrder.indexOf('.');
-                    const seqPart = dotIdx > 0 ? parseInt(entry.tsOrder.substring(dotIdx + 1), 10) : 0;
-                    const idx = seqPart % windowMsgs.length;
-                    const msg = windowMsgs[idx];
-                    console.log(`[查找] 时间窗口溢出: pending=${pendingBatch.length} window=${windowMsgs.length} seqPart=${seqPart} idx=${idx} → MTProto ID=${msg.id}`);
-                    const map = loadFileMap();
-                    if (map[fileId]) { map[fileId].mtprotoId = msg.id; saveFileMap(map); }
-                    return msg;
-                }
-            }
-        }
+        // pending 比 docMsgs 多 → 用模运算分散
+        const idx = pendingIdx % docMsgs.length;
+        const msg = docMsgs[idx];
+        console.log(`[查找] 顺序溢出: pendingIdx=${pendingIdx} docMsgs=${docMsgs.length} idx=${idx} → MTProto ID=${msg.id}`);
+        const map = loadFileMap();
+        if (map[fileId]) { map[fileId].mtprotoId = msg.id; saveFileMap(map); }
+        return msg;
     }
-
-    // 不再需要独立的 tsOrder 和位置匹配降级逻辑（已统一到时间窗口匹配）
 
     // 终极降级：取最新一条 document
     const fallback = docMsgs[docMsgs.length - 1];
