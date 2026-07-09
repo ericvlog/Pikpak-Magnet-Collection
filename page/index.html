@@ -3533,7 +3533,7 @@ function loginGDrive() {
             }
             // 检测 t.me 链接
             const tgLinks = extractTelegramLinks(text);
-            const newTgLinks = tgLinks.filter(link => !isTgLinkIgnored(link));
+            const newTgLinks = tgLinks.filter(link => !isTgLinkIgnored(link) && !magnets.some(m => m.messageUrl === link));
             if (newTgLinks.length > 0 && window.__MAGNET_HELPER_EXTENSION__) {
                 clipboardMagnetLastFocusTime = Date.now();
                 for (const link of newTgLinks) {
