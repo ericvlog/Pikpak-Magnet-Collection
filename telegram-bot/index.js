@@ -26,6 +26,21 @@ const IMAGES_DIR = path.join(__dirname, 'images');
 const TARGET_BOT = process.env.TARGET_BOT_USERNAME || '@PikPak_Bot';
 const DOC_MAP_FILE = path.join(__dirname, 'docMap.json');
 
+function retryFs(fn, maxRetries = 5, fallback) {
+    for (let i = 0; i < maxRetries; i++) {
+        try { return fn(); } catch (e) {
+            if (i === maxRetries - 1) {
+                if (arguments.length >= 3) return fallback;
+                throw e;
+            }
+            // busy-wait ~50ms to let Windows release file lock
+            const t = Date.now() + 50;
+            while (Date.now() < t) { }
+            console.warn(`[retryFs] 第 ${i + 1} 次重试: ${e.message}`);
+        }
+    }
+}
+
 if (!BOT_TOKEN) {
     console.error('❌ 缺少 BOT_TOKEN，请在 .env 中设置');
     process.exit(1);
@@ -54,14 +69,14 @@ function saveFileMap(map) {
 // ===== docMap: 存储从 t.me 链接获取的 MTProto 文档信息（按需转发用） =====
 
 function loadDocMap() {
-    try {
+    return retryFs(() => {
         if (!fs.existsSync(DOC_MAP_FILE)) return {};
         return JSON.parse(fs.readFileSync(DOC_MAP_FILE, 'utf-8'));
-    } catch { return {}; }
+    }, 3, {});
 }
 
 function saveDocMap(map) {
-    fs.writeFileSync(DOC_MAP_FILE, JSON.stringify(map, null, 2), 'utf-8');
+    retryFs(() => fs.writeFileSync(DOC_MAP_FILE, JSON.stringify(map, null, 2), 'utf-8'));
 }
 
 function addDocEntry(doc, { peer = '', msgId = 0 } = {}) {
@@ -262,14 +277,14 @@ function saveUserSession(client) {
 
 // ===== 队列持久化 =====
 function loadPending() {
-    try {
+    return retryFs(() => {
         if (!fs.existsSync(PENDING_FILE)) return [];
         return JSON.parse(fs.readFileSync(PENDING_FILE, 'utf-8'));
-    } catch { return []; }
+    }, 3, []);
 }
 
 function savePending(items) {
-    fs.writeFileSync(PENDING_FILE, JSON.stringify(items, null, 2), 'utf-8');
+    retryFs(() => fs.writeFileSync(PENDING_FILE, JSON.stringify(items, null, 2), 'utf-8'));
 }
 
 function addPending(item) {
