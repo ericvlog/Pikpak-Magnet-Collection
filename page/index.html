@@ -864,6 +864,7 @@
 <button id="telegramLoginBtn" class="btn" style="background:#0088cc;color:white;font-size:0.8rem;"><i class="fas fa-paper-plane"></i> <span id="telegramLoginLabel">TG 登录</span></button>
 <button id="connectionTestBtn" class="btn btn-outline" style="font-size:0.8rem;">🔍 测试连通性</button>
 <button id="clipboardWatchToggleBtn" class="btn btn-success">🟢 监视剪贴板</button>
+<span id="tgProgressStatus" style="font-size:0.75rem;color:var(--text-secondary);margin-left:8px;"></span>
         </div></div></div>
         <div class="drag-area" id="tagsDragArea"><div class="drag-header" data-target="tagsContent"><div class="drag-title"><i class="fas fa-hashtag"></i> 🏷️ 拖拽标签可排序（点击筛选）</div><i class="fas fa-chevron-down toggle-icon"></i></div><div class="drag-content" id="tagsContent"><div id="draggableTagsList" class="tags-container"></div></div></div>
         <div class="filter-bar">
@@ -3611,25 +3612,28 @@ function loginGDrive() {
     async function processTgLinkQueue() {
         if (clipboardTgProcessing || clipboardTgQueue.length === 0) return;
         clipboardTgProcessing = true;
-        let hasNew = false;
+        const total = clipboardTgQueue.length;
+        let done = 0, hasNew = false;
+        const statusEl = document.getElementById('tgProgressStatus');
+        if (statusEl) statusEl.textContent = `📨 正在解析 0/${total}...`;
         while (clipboardTgQueue.length > 0) {
             const url = clipboardTgQueue[0];
             try {
                 const result = await resolveTgLinkViaBridge(url);
+                done++;
+                if (statusEl) statusEl.textContent = `📨 正在解析 ${done}/${total}...`;
                 if (result.pendingCreated === false) {
-                    showToast(`📨 ${result.message || '该链接已在列表中'}`);
-                } else if (result.message) {
-                    showToast(`📨 ${result.message}${result.restricted ? ' 🔒 私密频道' : ''}`);
-                    if (result.pendingCreated !== false) hasNew = true;
+                    // 已在列表中，不 toast
                 } else {
-                    showToast(`✅ Telegram 链接解析成功${result.restricted ? ' 🔒 私密频道' : ''}`);
                     hasNew = true;
                 }
                 markTgLinkIgnored(url);
                 clipboardTgQueue.shift();
                 saveClipboardTgQueue();
             } catch (err) {
-                showToast(`❌ 解析失败: ${err.message}`, true);
+                done++;
+                if (statusEl) statusEl.textContent = `📨 正在解析 ${done}/${total}...`;
+                console.warn('解析失败:', url, err.message);
                 markTgLinkIgnored(url);
                 clipboardTgQueue.shift();
                 saveClipboardTgQueue();
@@ -3638,7 +3642,19 @@ function loginGDrive() {
         clipboardTgProcessing = false;
         if (clipboardTgQueue.length > 0) processTgLinkQueue();
         if (hasNew && typeof importFromExtension === 'function') {
-            setTimeout(() => importFromExtension(), 800);
+            if (statusEl) statusEl.textContent = '📥 正在导入...';
+            setTimeout(async () => {
+                try {
+                    await importFromExtension();
+                    if (statusEl) statusEl.textContent = `✅ 已导入 ${done} 张卡片`;
+                    setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
+                } catch(e) {
+                    if (statusEl) statusEl.textContent = '❌ 导入失败';
+                    setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
+                }
+            }, 800);
+        } else {
+            if (statusEl) statusEl.textContent = '';
         }
     }
 
