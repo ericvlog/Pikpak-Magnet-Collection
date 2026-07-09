@@ -115,7 +115,7 @@
         .card-checkbox { position: absolute; top: 10px; left: 10px; z-index: 10; width: 20px; height: 20px; cursor: pointer; accent-color: #0f3b3f; display: none; }
         .selection-mode .card-checkbox { display: block; }
         .selection-mode .magnet-card { cursor: default; }
-        .preview-img { height: 160px; background-size: cover; background-position: center; cursor: pointer; }
+        .preview-img { height: 160px; background-size: contain; background-position: center; background-repeat: no-repeat; background-color: #1a1a2e; cursor: pointer; }
         .card-content { padding: 1rem; }
         .card-title { font-weight: bold; font-size: 1rem; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
         .local-badge { font-size: 0.7rem; background: #10b981; color: white; padding: 2px 6px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
@@ -499,7 +499,8 @@
         .card-preview-hero img {
             width: 100%;
             height: 100%;
-            object-fit: cover;
+            object-fit: contain;
+            background: #1a1a2e;
             display: block;
         }
         .card-preview-close {
