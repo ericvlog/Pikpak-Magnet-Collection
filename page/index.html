@@ -3642,10 +3642,7 @@ function loginGDrive() {
         }
         clipboardTgProcessing = false;
         if (clipboardTgQueue.length > 0) processTgLinkQueue();
-        if (statusEl) {
-            statusEl.textContent = `✅ 已完成 ${done} 张`;
-            setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
-        }
+        if (statusEl) statusEl.textContent = `✅ 已完成 ${done} 张`;
     }
 
     function toggleClipboardWatch() {
