@@ -131,38 +131,27 @@ async function findMtprotoMessage(fileId, entry) {
     }
 
     // 按 Bot API messageId 顺序匹配 MTProto messageId 顺序
-    // pendingEntries[0] → docMsgs[docMsgs.length - pendingEntries.length + 0]
-    // pendingEntries[N] → docMsgs[docMsgs.length - pendingEntries.length + N]
+    // docMsgs 只包含最近 200 条消息中的文档，因此只取最后 docMsgs.length 条 pending 条目做一对一匹配
     const allMap = loadFileMap();
     const pendingEntries = Object.entries(allMap)
         .filter(([k, v]) => !v.mtprotoId && v.messageId)
         .sort((a, b) => a[1].messageId - b[1].messageId);
 
-    const pendingIdx = pendingEntries.findIndex(([fid]) => fid === fileId);
-    if (pendingIdx >= 0) {
-        if (pendingEntries.length <= docMsgs.length) {
-            const msgIdx = docMsgs.length - pendingEntries.length + pendingIdx;
-            const msg = docMsgs[msgIdx];
-            console.log(`[查找] 顺序匹配: pendingIdx=${pendingIdx} msgIdx=${msgIdx} total=${pendingEntries.length} docMsgs=${docMsgs.length} → MTProto ID=${msg.id}`);
-            const map = loadFileMap();
-            if (map[fileId]) { map[fileId].mtprotoId = msg.id; saveFileMap(map); }
-            return msg;
-        }
-        // pending 比 docMsgs 多 → 用模运算分散
-        const idx = pendingIdx % docMsgs.length;
-        const msg = docMsgs[idx];
-        console.log(`[查找] 顺序溢出: pendingIdx=${pendingIdx} docMsgs=${docMsgs.length} idx=${idx} → MTProto ID=${msg.id}`);
+    // 只有最新的 docMsgs.length 条 pending 条目才能在 docMsgs 中有对应消息
+    const visibleStart = Math.max(0, pendingEntries.length - docMsgs.length);
+    const visibleIdx = pendingEntries.slice(visibleStart).findIndex(([fid]) => fid === fileId);
+    if (visibleIdx >= 0) {
+        const msg = docMsgs[visibleIdx];
+        console.log(`[查找] 顺序匹配: visibleIdx=${visibleIdx} visibleStart=${visibleStart} total=${pendingEntries.length} docMsgs=${docMsgs.length} → MTProto ID=${msg.id}`);
         const map = loadFileMap();
         if (map[fileId]) { map[fileId].mtprotoId = msg.id; saveFileMap(map); }
         return msg;
     }
 
-    // 终极降级：取最新一条 document
+    // 终极降级：取最新一条 document（不缓存 mtprotoId，避免旧条目污染）
     const fallback = docMsgs[docMsgs.length - 1];
     if (fallback) {
-        console.log(`[查找] 终极降级取最新: MTProto ID=${fallback.id}`);
-        const map3 = loadFileMap();
-        if (map3[fileId]) { map3[fileId].mtprotoId = fallback.id; saveFileMap(map3); }
+        console.log(`[查找] 警告: ${fileId.substring(0, 20)}... 无法精确匹配，使用最新消息暂代: MTProto ID=${fallback.id}`);
         return fallback;
     }
 
