@@ -3613,7 +3613,7 @@ function loginGDrive() {
         if (clipboardTgProcessing || clipboardTgQueue.length === 0) return;
         clipboardTgProcessing = true;
         const total = clipboardTgQueue.length;
-        let done = 0, hasNew = false;
+        let done = 0;
         const statusEl = document.getElementById('tgProgressStatus');
         if (statusEl) statusEl.textContent = `📨 正在解析 0/${total}...`;
         while (clipboardTgQueue.length > 0) {
@@ -3623,13 +3623,14 @@ function loginGDrive() {
                 done++;
                 if (statusEl) statusEl.textContent = `📨 正在解析 ${done}/${total}...`;
                 if (result.pendingCreated === false) {
-                    // 已在列表中，不 toast
-                } else {
-                    hasNew = true;
+                    // 已在列表中
                 }
                 markTgLinkIgnored(url);
                 clipboardTgQueue.shift();
                 saveClipboardTgQueue();
+                if (result.pendingCreated !== false && typeof importFromExtension === 'function') {
+                    setTimeout(() => importFromExtension(), 500);
+                }
             } catch (err) {
                 done++;
                 if (statusEl) statusEl.textContent = `📨 正在解析 ${done}/${total}...`;
@@ -3641,20 +3642,9 @@ function loginGDrive() {
         }
         clipboardTgProcessing = false;
         if (clipboardTgQueue.length > 0) processTgLinkQueue();
-        if (hasNew && typeof importFromExtension === 'function') {
-            if (statusEl) statusEl.textContent = '📥 正在导入...';
-            setTimeout(async () => {
-                try {
-                    await importFromExtension();
-                    if (statusEl) statusEl.textContent = `✅ 已导入 ${done} 张卡片`;
-                    setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
-                } catch(e) {
-                    if (statusEl) statusEl.textContent = '❌ 导入失败';
-                    setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
-                }
-            }, 800);
-        } else {
-            if (statusEl) statusEl.textContent = '';
+        if (statusEl) {
+            statusEl.textContent = `✅ 已完成 ${done} 张`;
+            setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
         }
     }
 
