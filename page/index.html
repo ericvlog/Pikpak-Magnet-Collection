@@ -868,8 +868,7 @@
         <div class="filter-bar">
             <input type="text" id="searchInput" placeholder="🔍 搜索标题或标签" style="width:200px">
             <div class="rating-filter"><span>评分筛选：</span><div class="star-filter" id="ratingFilter"><i data-rating="1" class="far fa-star"></i><i data-rating="2" class="far fa-star"></i><i data-rating="3" class="far fa-star"></i><i data-rating="4" class="far fa-star"></i><i data-rating="5" class="far fa-star"></i></div><button id="clearRatingFilter" class="btn-outline btn" style="padding:4px 12px;">清除</button></div>
-            <select id="filterTypeSelect" style="padding:3px 8px;font-size:0.8rem;border-radius:6px;border:1px solid #555;background:var(--card-bg);color:var(--text-color);cursor:pointer;">
-                <option value="all">📋 全部卡片</option>
+            <select id="filterTypeSelect" style="padding:3px 6px;font-size:0.8rem;border-radius:6px;border:1px solid #555;background:var(--card-bg);color:var(--text-color);cursor:pointer;max-width:100px;">
                 <option value="noTag">🏷 无标签</option>
                 <option value="netImg">🌐 网络图</option>
                 <option value="telegram">📱 电报卡片</option>
@@ -882,7 +881,7 @@
     </div>
 </div>
 <button id="floatHideImageBtn" class="float-hide-btn" title="隐藏/显示图片"><i class="fas fa-image"></i><i class="fas fa-eye-slash"></i><span>隐藏<br>图片</span></button>
-<div class="floating-controls"><div id="floatingBatchBar" class="batch-bar"><span id="selectedCount">已选择 0 个卡片</span><div class="batch-actions"><button id="batchAddTagsBtn" class="btn btn-primary">🏷️ 批量添加标签</button><button id="batchCopyLinksBtn" class="btn btn-success">🔗 批量复制链接</button><button id="batchSaveImagesBtn" class="btn btn-primary" style="background:#0f3b3f;">💾 批量存本地</button><button id="batchDeleteBtn" class="btn btn-danger">🗑️ 批量删除</button><button id="selectAllCurrentBtn" class="btn btn-outline">✔️ 全选当前视图</button><button id="selectAllFilteredBtn" class="btn btn-outline">⭐ 全选全部筛选结果</button><button id="batchOfflineBtn" class="btn btn-primary" style="background:#0f3b3f;">📥 批量离线</button><button id="cancelSelectionBtn" class="btn btn-outline">❌ 取消选择</button></div></div></div>
+<div class="floating-controls"><div id="floatingBatchBar" class="batch-bar"><span id="selectedCount">已选择 0 个卡片</span><div class="batch-actions"><button id="batchAddTagsBtn" class="btn btn-primary">🏷️ 批量添加标签</button><button id="batchCopyLinksBtn" class="btn btn-success">🔗 批量复制链接</button><button id="batchSaveImagesBtn" class="btn btn-primary" style="background:#0f3b3f;">💾 批量存本地</button><button id="batchDeleteBtn" class="btn btn-danger">🗑️ 批量删除</button><button id="batchReFetchBtn" class="btn btn-warning" style="background:#8b5e3c;color:#fff;">🔄 重新获取</button><button id="selectAllCurrentBtn" class="btn btn-outline">✔️ 全选当前视图</button><button id="selectAllFilteredBtn" class="btn btn-outline">⭐ 全选全部筛选结果</button><button id="batchOfflineBtn" class="btn btn-primary" style="background:#0f3b3f;">📥 批量离线</button><button id="cancelSelectionBtn" class="btn btn-outline">❌ 取消选择</button></div></div></div>
 
 <!-- ===== 所有模态框 ===== -->
 <div id="batchCopyModal" class="modal"><div class="modal-card"><div class="flex-between"><h3>📋 批量磁力链接</h3><button id="closeBatchCopyModalBtn" class="icon-btn">✖</button></div><div style="padding:1rem;"><div id="batchLinksContainer" class="batch-links-container"></div><div style="display:flex;justify-content:flex-end;gap:12px;margin-top:1rem;"><button id="copyAllBatchLinksBtn" class="btn btn-primary">📋 复制全部</button><button id="cancelBatchCopyBtn" class="btn btn-outline">关闭</button></div></div></div></div>
@@ -921,7 +920,7 @@
     let failList = [];
     let nextTagId = 4, nextMagnetId = 1;
     let currentRatingFilter = 0;
-    let filterType = 'all';
+    let filterType = '';
     let collapsedTags = false;
     let selectionMode = false;
     let selectedCardIds = new Set();
@@ -1556,7 +1555,10 @@ if (selectedCardIds.size === 0) { alert('请先选择卡片'); return; }
 const links = [];
 for (const id of selectedCardIds) {
 const m = magnets.find(m => m.id === id);
-if (m && m.magnetLink) links.push(m.magnetLink);
+if (m) {
+if (m.magnetLink) links.push(m.magnetLink);
+else if (m.messageUrl) links.push(m.messageUrl);
+}
 }
 if (links.length === 0) { alert('没有可复制的链接'); return; }
 disableCardMagnetLinks();
@@ -2233,10 +2235,11 @@ function bindMagnetLinkEvents() {
 
     // ===== 多选 & 界面控制 =====
     function toggleSelectionMode(){ selectionMode=!selectionMode; const container=document.getElementById('magnetGridContainer'); const bar=document.getElementById('floatingBatchBar'); if(selectionMode){ container.classList.add('selection-mode'); if(selectedCardIds.size>0) bar.style.display='flex'; else bar.style.display='none'; lastSelectedCardId=null; }else{ container.classList.remove('selection-mode'); bar.style.display='none'; selectedCardIds.clear(); } renderLoadedCards(); }
-    function updateSelectedCount(){ const span=document.getElementById('selectedCount'); if(span) span.innerText=`已选择 ${selectedCardIds.size} 个卡片`; const btns=document.querySelectorAll('#batchAddTagsBtn, #batchCopyLinksBtn, #batchDeleteBtn, #batchSaveImagesBtn, #batchOfflineBtn'); btns.forEach(btn=>btn.disabled=(selectedCardIds.size===0)); const bar=document.getElementById('floatingBatchBar'); if(selectionMode){ if(selectedCardIds.size>0) bar.style.display='flex'; else bar.style.display='none'; } }
+    function updateSelectedCount(){ const span=document.getElementById('selectedCount'); if(span) span.innerText=`已选择 ${selectedCardIds.size} 个卡片`; const btns=document.querySelectorAll('#batchAddTagsBtn, #batchCopyLinksBtn, #batchDeleteBtn, #batchSaveImagesBtn, #batchOfflineBtn, #batchReFetchBtn'); btns.forEach(btn=>btn.disabled=(selectedCardIds.size===0)); const bar=document.getElementById('floatingBatchBar'); if(selectionMode){ if(selectedCardIds.size>0) bar.style.display='flex'; else bar.style.display='none'; } }
     function selectAllCurrent(){ const ids=allFilteredMagnets.slice(0,currentLoadedCount).map(m=>m.id); ids.forEach(id=>selectedCardIds.add(id)); renderLoadedCards(); updateSelectedCount(); showToast(`已选择当前视图中的 ${ids.length} 张卡片`); }
     function selectAllFiltered(){ allFilteredMagnets.forEach(m=>selectedCardIds.add(m.id)); renderLoadedCards(); updateSelectedCount(); showToast(`已选择所有筛选结果中的 ${allFilteredMagnets.length} 张卡片`); }
     async function batchDelete(){ if(selectedCardIds.size===0){ alert('请先选择卡片'); return; } if(confirm(`确定要永久删除选中的 ${selectedCardIds.size} 张卡片吗？`)){ const toDel=Array.from(selectedCardIds); magnets=magnets.filter(m=>!selectedCardIds.has(m.id)); selectedCardIds.clear(); await saveToDB(); updateFilteredList(); currentLoadedCount=0; renderLoadedCards(); updateStats(allFilteredMagnets.length,magnets.length); showToast(`已删除 ${toDel.length} 张卡片`); updateSelectedCount(); if(selectionMode) toggleSelectionMode(); } }
+    async function batchReFetchCards(){ if(selectedCardIds.size===0){ alert('请先选择卡片'); return; } const cards=Array.from(selectedCardIds).map(id=>magnets.find(m=>m.id===id)).filter(Boolean); const withUrl=cards.filter(m=>m.messageUrl); if(withUrl.length===0){ alert('选中的卡片没有 t.me 链接，无法重新获取'); return; } if(!confirm(`确定要重新获取 ${withUrl.length} 张卡片的 Telegram 链接吗？将删除旧卡片并创建新的待处理卡片。`)) return; showToast(`正在重新获取 ${withUrl.length} 张卡片...`); let ok=0,fail=0; for(const m of withUrl){ try{ await resolveTgLinkViaBridge(m.messageUrl); ok++; }catch(e){ fail++; console.warn('重新获取失败:', m.messageUrl, e.message); } } magnets=magnets.filter(m=>!selectedCardIds.has(m.id)); selectedCardIds.clear(); await saveToDB(); updateFilteredList(); currentLoadedCount=0; renderLoadedCards(); updateStats(allFilteredMagnets.length,magnets.length); updateSelectedCount(); if(selectionMode) toggleSelectionMode(); setTimeout(()=>{ if(typeof importFromExtension==='function') importFromExtension(); },800); showToast(`✅ 已重新获取 ${ok} 张卡片${fail>0?`, ${fail} 张失败`:''}`); }
     function openBatchAddTags(){ if(selectedCardIds.size===0){ alert('请先选择卡片'); return; } const container=document.getElementById('batchTagSelectorContainer'); container.innerHTML=''; tags.forEach(tag=>{ const span=document.createElement('span'); span.className='tag-option'; span.textContent=`# ${tag.name}`; span.dataset.id=tag.id; span.onclick=()=>{ span.classList.toggle('selected'); }; container.appendChild(span); }); document.getElementById('batchTagModal').style.display='flex'; }
     async function confirmBatchAddTags(){ const selected=Array.from(document.querySelectorAll('#batchTagSelectorContainer .tag-option.selected')).map(span=>parseInt(span.dataset.id)); if(selected.length===0){ alert('请至少选择一个标签'); return; } for(const id of selectedCardIds){ const m=magnets.find(m=>m.id===id); if(m){ for(const tid of selected){ if(!m.tagIds.includes(tid)) m.tagIds.push(tid); } } } await saveToDB(); updateFilteredList(); currentLoadedCount=0; renderLoadedCards(); updateStats(allFilteredMagnets.length,magnets.length); showToast(`已为 ${selectedCardIds.size} 个卡片添加所选标签`); document.getElementById('batchTagModal').style.display='none'; updateSelectedCount(); }
     function cancelSelection(){ if(selectionMode) toggleSelectionMode(); }
@@ -3787,7 +3790,20 @@ function loginGDrive() {
     // 修改关闭模态框时不清除列表（持久化）
     document.getElementById('closeBatchAddModalBtn').addEventListener('click', () => {
         document.getElementById('batchAddModal').style.display = 'none';
-        // 不删除 batchItems，保留
+    });
+    document.getElementById('closeBatchCopyModalBtn').addEventListener('click', () => {
+        document.getElementById('batchCopyModal').style.display = 'none';
+        restoreCardMagnetLinks();
+    });
+    document.getElementById('cancelBatchCopyBtn').addEventListener('click', () => {
+        document.getElementById('batchCopyModal').style.display = 'none';
+        restoreCardMagnetLinks();
+    });
+    document.getElementById('batchCopyModal').addEventListener('click', (e) => {
+        if (e.target === e.currentTarget) {
+            document.getElementById('batchCopyModal').style.display = 'none';
+            restoreCardMagnetLinks();
+        }
     });
     document.getElementById('batchAddModal').addEventListener('click', (e) => {
         if (e.target === e.currentTarget) document.getElementById('batchAddModal').style.display = 'none';
@@ -4319,8 +4335,8 @@ const magnetLinkEl = m.magnetLink ? `<a href="${escapeHtml(m.magnetLink)}" class
             document.getElementById('searchInput').value = '';
             currentRatingFilter = 0;
             updateRatingFilterUI();
-            filterType = 'all';
-            document.getElementById('filterTypeSelect').value = 'all';
+            filterType = '';
+            document.getElementById('filterTypeSelect').value = '';
             updateFilteredList();
             currentLoadedCount = 0;
             renderLoadedCards();
@@ -4339,6 +4355,7 @@ const magnetLinkEl = m.magnetLink ? `<a href="${escapeHtml(m.magnetLink)}" class
         document.getElementById('batchCopyLinksBtn').onclick = batchCopyLinksWithModal;
         document.getElementById('batchSaveImagesBtn').onclick = batchSaveSelectedImages;
         document.getElementById('batchDeleteBtn').onclick = batchDelete;
+        document.getElementById('batchReFetchBtn').onclick = batchReFetchCards;
         document.getElementById('batchOfflineBtn').onclick = batchOfflineToPikPak;
 
         // 批量离线文件夹选择
