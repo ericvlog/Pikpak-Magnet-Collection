@@ -363,6 +363,8 @@ async function downloadMediaViaGramjs(client, msg, options = {}) {
 // ===== 发送 Document 到 @PikPakBot（通过 MTProto，不重新上传）=====
 async function sendDocumentToPikpak(client, doc, { retryAsUpload = true } = {}) {
     const targetPeer = await client.getInputEntity(TARGET_BOT);
+    const sendId = BigInt(Math.floor(Math.random() * 1e15));
+    console.log(`[转发] 发送 media: doc.id=${doc.id} randomId=${sendId}`);
     try {
         const inputMedia = new Api.InputMediaDocument({
             id: new Api.InputDocument({
@@ -375,7 +377,7 @@ async function sendDocumentToPikpak(client, doc, { retryAsUpload = true } = {}) 
             peer: targetPeer,
             media: inputMedia,
             message: '',
-            randomId: BigInt(Math.floor(Math.random() * 1e15)),
+            randomId: sendId,
         }));
     } catch (err) {
         if (err.message && err.message.includes('CHAT_FORWARDS_RESTRICTED')) {
@@ -892,8 +894,10 @@ app.post('/api/forward-to-pikpak/:fileId', async (req, res) => {
             const docMap = loadDocMap();
             const docEntry = docMap[docId];
             if (!docEntry) {
+                console.log(`[转发] ❌ doc:${docId.substring(0, 8)}... 不存在`);
                 return res.status(404).json({ error: '文档信息已过期或不存在（请重新解析 t.me 链接）' });
             }
+            console.log(`[转发] 处理 doc:${docId.substring(0, 8)}... id=${docEntry.id} file=${docEntry.fileName} msgId=${docEntry.msgId}`);
             await sendDocumentToPikpak(client, {
                 id: BigInt(docEntry.id),
                 accessHash: BigInt(docEntry.accessHash),
@@ -907,7 +911,7 @@ app.post('/api/forward-to-pikpak/:fileId', async (req, res) => {
                 dcId: docEntry.dcId || 1,
             });
             removeDocEntry(docId);
-            console.log(`[转发] doc:${docId.substring(0, 8)}... → ${TARGET_BOT} 成功`);
+            console.log(`[转发] ✅ doc:${docId.substring(0, 8)}... id=${docEntry.id} → ${TARGET_BOT} 成功`);
             res.json({ success: true });
             return;
         }
