@@ -780,7 +780,10 @@ const app = express();
 app.use(express.json());
 
 // 静态资源（卡片缩略图）
-app.use('/images', express.static(IMAGES_DIR));
+app.use('/images', (req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    express.static(IMAGES_DIR)(req, res, next);
+});
 
 // 获取待消费队列
 app.get('/api/pending', (req, res) => {
