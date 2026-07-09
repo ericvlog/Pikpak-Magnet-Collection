@@ -255,7 +255,8 @@
         .pk-magnet-preview-hero img {
             width: 100%;
             height: 100%;
-            object-fit: cover;
+            object-fit: contain;
+            background: #1a1a2e;
             display: block;
         }
         .pk-magnet-preview-close {
@@ -321,7 +322,8 @@
         .pk-magnet-preview-shot img {
             width: 100%;
             height: 100%;
-            object-fit: cover;
+            object-fit: contain;
+            background: #1a1a2e;
             display: block;
         }
         .pk-magnet-preview-meta {
