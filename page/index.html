@@ -4588,6 +4588,9 @@ const magnetLinkEl = m.magnetLink ? `<a href="${escapeHtml(m.magnetLink)}" class
             if (card.fileId && card.fileId.startsWith('doc:')) fileIds.push(card.fileId);
             if (card.fileIds) fileIds.push(...card.fileIds.filter(f => f.startsWith('doc:')));
             const uniqueIds = [...new Set(fileIds)];
+            // 如果所有 fileId 已有 fileMeta，视为已迁移（如已通过「更新」按钮手动处理过的卡片）
+            const allHaveMeta = uniqueIds.every(fid => card.fileMeta && card.fileMeta[fid]);
+            if (allHaveMeta && uniqueIds.length > 0) { ok++; continue; }
             let migrated = false;
             for (const fid of uniqueIds) {
                 const docId = fid.replace('doc:', '');
