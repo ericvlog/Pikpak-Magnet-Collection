@@ -4,449 +4,199 @@
 
 ---
 
-## 组件
+## 🚀 快速开始
 
-| 组件 | 目录 | 说明 |
-|------|------|------|
-| **📄 静态页面** | `page/` | 磁力管理器主界面，完整功能，可部署到 GitHub Pages 或任意静态托管 |
-| **🔌 浏览器扩展** | `extension/` | 增强功能：任意网页磁力嗅探、图片代理下载、PikPak 直连（无需 CORS 代理） |
-| **🌐 CORS 代理** | `api/` | Vercel Serverless，浏览器直调 PikPak API 的中转（扩展方案的备选） |
-| **🖥️ 本地代理** | `proxy/` | 本地 Node.js 服务器，同时提供 API 代理和静态页面服务 |
-| **🤖 Telegram Bot** | `telegram-bot/` | 通过 MTProto 解析 t.me 链接，将视频转发到 @PikPak_Bot 离线 |
+### 只用网页（推荐配合扩展）
 
-## 流程总览
+1. 部署 `page/index.html` 到 GitHub Pages 或任意静态托管
+2. 安装下方浏览器扩展
+3. 页面自动通过扩展桥接 PikPak，无需配置
+4. 登录 PikPak 即可离线下载
 
-```
-用户 → 部署网页 (GitHub Pages / 本地)
-       ├── 安装扩展 → 扩展桥接 PikPak API（推荐，无需 CORS 代理）
-       │                 │
-       │          ┌──────┴──────┐
-       │          │  离线下载    │  任意网页嗅探磁力
-       │          │  图片代理    │  预览窗口 → 保存/离线下载
-       │          │  Token刷新   │  待导入队列
-       │          └─────────────┘
-       │
-       └── 无扩展 → 自行部署 Vercel CORS 代理
-                    → 在页面配置代理地址
-                    → 页面直连 PikPak API
-```
+> 也可以不装扩展独立使用，需自行部署 CORS 代理（见下方）。
 
-## 快速开始
+### 安装浏览器扩展
 
-### 方式一：只用网页（推荐配合扩展）
+1. 打开 `chrome://extensions` → 开启 **开发者模式**
+2. **加载已解压的扩展程序** → 选择本仓库 `extension/` 目录
+3. 扩展会自动注入到所有网页，安装后在任意网页的磁力链接旁会出现「预览」按钮
 
-1. 将 `page/index.html` 部署到 GitHub Pages 或任意静态托管
-2. 安装浏览器扩展（下方 "安装扩展"）
-3. 页面会自动通过扩展桥接 PikPak，无需配置任何代理
-4. 登录 PikPak 即可使用离线下载
+> 扩展功能：磁力嗅探、预览弹窗、图片代理下载、PikPak 内部登录、待导入队列
 
-> 网页也可以不装扩展独立使用，但需要自行部署 CORS 代理（见 "部署 CORS 代理"）。
-
-### 方式二：完整体验（网页 + 扩展 + 代理）
-
-这是最推荐的方案，覆盖所有功能。
+扩展设置：右键扩展图标 → **选项**，可登录 PikPak、管理待导入队列、配置图片白名单。
 
 ---
 
-## 安装扩展
+## 📖 功能使用指南
 
-1. 打开 Chrome/Edge 扩展管理页面：`chrome://extensions`
-2. 开启 **开发者模式**（右上角）
-3. 点击 **加载已解压的扩展程序**
-4. 选择本仓库的 `extension/` 目录
-5. 安装完成，扩展会自动注入到所有网页
+### 添加磁力
 
-### 扩展功能
-
-| 功能 | 说明 |
+| 方式 | 操作 |
 |------|------|
-| **磁力嗅探** | 自动扫描任意网页上的 magnet: 链接，在链接旁显示「预览」按钮 |
-| **预览弹窗** | 点击「预览」弹出磁力详情（标题、截图、大小），支持保存到管理器或发送到 PikPak |
-| **图片代理下载** | 绕过图片热链限制，将网页图片保存到管理器本地 |
-| **PikPak 内部登录** | 直接在扩展设置页输入账号密码登录，自动管理 Token 和自动刷新 |
-| **Token 捕获** | 访问 mypikpak.com 时自动捕获已登录的 Token |
-| **待导入队列** | 从任意网页「保存到管理器」的磁力暂存队列，打开管理器页面时自动导入 |
-| **白名单配置** | 在扩展设置页配置图片代理白名单域名 |
+| **➕ 添加磁力** | 点顶部工具栏按钮，手动输入磁力链接和标题 |
+| **📋 从剪贴板导入** | 复制 JSON 格式的磁力数据，点菜单项导入 |
+| **🔗 粘贴磁力链接** | 复制磁力链接，页面自动检测剪贴板并提示导入 |
+| **📥 批量添加** | 点「添加磁力」→ 粘贴多个磁力链接（每行一个）→ 解析 → 可预览/离线/保存 |
 
-### 扩展设置
+> 批量添加时点击「保存」会自动从 whatslink.info 获取标题、截图、文件大小，无需手动填写。
 
-打开扩展设置：右键扩展图标 → **选项**，或点击 `chrome://extensions` 中扩展的 **详情 → 扩展选项**。
+### 从 Telegram 导入视频
 
-设置项：
-- **PikPak 登录**：直接输入账号密码登录，扩展自动维护 Token
-- **Token 状态**：查看当前 Token 有效性，手动刷新
-- **待导入队列**：查看和管理从网页保存的磁力
-- **图片白名单**：添加图片源站域名（如 `imagetwist.com`），扩展才能代理下载
+需要部署 Telegram Bot（见下方「部署 Telegram Bot」）。
+
+1. 复制 t.me 链接（如 `https://t.me/xxx/123`）
+2. 页面或扩展自动检测，解析视频信息
+3. 卡片自动出现在列表中，点「离线」即可转发到 @PikPak_Bot
+
+**卡片上的按钮说明：**
+
+| 按钮 | 功能 |
+|------|------|
+| 📥 离线 | 将视频转发到 @PikPak_Bot 离线下载 |
+| 🖼 预览 | 查看卡片大图和管理标签 |
+| 🔄 更新 | 重新从 Telegram 获取文件元数据（文件引用过期时使用） |
+| ✏ 编辑 | 修改标题、大小、图片、标签 |
+| 💾 存本地 | 将网络图片下载到浏览器本地存储 |
+| 🗑 删除 | 删除卡片 |
+
+### 标签系统
+
+- **创建标签**：菜单 → 管理标签 → 添加
+- **拖拽排序**：在标签栏拖拽标签可调整顺序
+- **自动标签**：菜单 → 自动标签规则 → 添加规则（如标题含 "4K" 自动打标签）
+- **批量应用**：菜单 → 批量应用规则 → 对所有卡片执行自动标签规则
+- **筛选**：点击标签可筛选该标签的卡片
+
+### 批量操作
+
+进入选择模式（勾选卡片右上角复选框），底部工具栏出现：
+
+| 按钮 | 功能 |
+|------|------|
+| 🏷️ 批量添加标签 | 给选中卡片统一加标签 |
+| 🔗 批量复制链接 | 复制所有选中卡片的磁力链接 |
+| 💾 批量存本地 | 将选中卡片的网络图片下载到本地 |
+| 📥 批量离线 | 将选中卡片发送到 PikPak（可选文件夹） |
+| 🗑 批量删除 | 删除选中卡片 |
+| 🔄 重新获取 | 按 TG 链接重新获取卡片（会删除原卡片再创建新的） |
+| 🔄 更新元数据 | 批量刷新 Telegram 视频文件的 fileMeta |
+
+> Shift+点击可连续多选，Ctrl+点击跳选。
+
+### 筛选与搜索
+
+| 方式 | 说明 |
+|------|------|
+| 🔍 搜索框 | 按标题或标签名搜索 |
+| ⭐ 评分筛选 | 按 1-5 星过滤 |
+| 📋 全部 / 🏷 无标签 / 🌐 网络图 / 🚫 无图片 / 📱 电报卡片 | 快速筛选 |
+| 点击标签 | 筛选该标签的卡片 |
+
+### Telegram Bot（部署后可用）
+
+| 功能 | 操作 |
+|------|------|
+| **Telegram 登录** | 点「TG 登录」→ 输入手机号 → 输入验证码 → 完成登录 |
+| **解析 TG 链接** | 自动检测剪贴板中的 t.me 链接，创建卡片 |
+| **转发到 PikPak** | 卡片点「离线」通过 Bot 转发视频 |
+| **文件引用过期** | 自动重新解析 TG 链接并重试转发 |
+| **元数据迁移** | 菜单 → 迁移旧卡片元数据 → 将旧卡片从 Bot docMap 迁移到卡片本地（备份前执行一次） |
+
+### 数据备份与恢复
+
+| 方式 | 位置 | 含图片 | 说明 |
+|------|------|--------|------|
+| 💾 导出单文件 | 侧边栏菜单 | ❌ 不含 | 快速备份元数据 |
+| 💾 完整备份（含图片） | 侧边栏菜单 | ✅ 含 ZIP | 迁移换设备用 |
+| ☁️ 云端管理 | 顶部工具栏 | ✅ 增量 | Google Drive 增量备份 |
+
+> 建议流程：迁移旧卡片元数据 → 完整备份（含图片）→ 存到云端。
 
 ---
 
-## 部署网页（GitHub Pages）
+## 🛠 部署指南
+
+### 部署网页（GitHub Pages）
 
 1. Fork 本仓库
-2. 进入仓库 **Settings → Pages**
-3. Source 选择 **GitHub Actions** 或 **Deploy from a branch**
-4. 选择 `main/master` 分支，目录选择 `/page/`
-5. 保存后等待部署完成
-6. 访问 `https://你的用户名.github.io/仓库名/`
+2. 仓库 **Settings → Pages** → Source 选 **GitHub Actions** 或 **Deploy from a branch**
+3. 目录选 `/page/`，部署完成访问 `https://你的用户名.github.io/仓库名/`
 
-也可以任意静态托管（Vercel、Netlify、Cloudflare Pages 等），只需托管 `page/index.html` 一个文件。
-
----
-
-## 部署 CORS 代理
-
-> 仅当不使用扩展时需要。扩展用户无需部署代理。
-
-### 一键部署到 Vercel
-
-[![Deploy to Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/ericvlog/Pikpak-Magnet-Collection)
-
-1. 点上方按钮
-2. 用 GitHub 登录 Vercel
-3. 仓库选择本仓库
-4. 点击 **Deploy**
-5. 部署完成后获得地址：`https://你的项目名.vercel.app`
-
-### 手动部署
-
-1. 在 [Vercel Dashboard](https://vercel.com/) 点击 **Add New → Project**
-2. 导入本仓库
-3. 确保 Root Directory 设置为仓库根目录（默认即可）
-4. 点击 **Deploy**
-
-### 在页面中配置
-
-1. 打开 `page/index.html`
-2. 点击 **PikPak 登录**
-3. 在弹窗底部填入代理地址：`https://你的项目名.vercel.app/api/proxy?url=`
-4. 点击 **保存**，待提示「代理连通 ✓」
-5. 输入账号密码登录
-
-> ✅ Vercel 代理对所有 PikPak API 可用（包括选文件夹和离线下载）。
-
-### 本地代理
-
-Windows 双击 `proxy/start-server.bat`，或命令行：
-
-```bash
-node proxy/server.js
-```
-
-默认监听 `http://localhost:3000`，同时提供 API 代理和页面服务。
-
-#### 配合 GitHub Pages 使用
-
-本地代理可跨域给 `https://你的用户名.github.io/Pikpak-Magnet-Collection/` 使用：
-
-1. 双击 `proxy/start-server.bat` 或运行 `node proxy/server.js`
-2. 打开 GitHub Pages 页面
-3. 点击 **PikPak 登录** → 在弹窗底部 CORS 代理输入框填入：
-   ```
-   http://你电脑的局域网IP:3000/?url=
-   ```
-   （IP 见启动时终端打印的提示，例如 `http://192.168.1.100:3000/?url=`）
-4. 保存 → 测试连通 → 登录 PikPak 即可
-
-> 手机访问 GitHub Pages 时，手机必须和电脑在同一 WiFi。
-
-#### 配合 GitHub Pages 使用（通过 HTTPS 隧道）
-
-> ⚠️ 浏览器禁止 HTTPS 页面请求 HTTP 地址。GitHub Pages 是 HTTPS，本地代理是 HTTP，直接配置无效。
-
-**方法一（推荐）：Cloudflare Tunnel（免注册，无需下载）**
-
-双击 `proxy/start-server.bat`，脚本会自动启动本地服务器 + Cloudflare Tunnel，终端会输出类似：
-
-```
-Cloudflare Tunnel URL: https://xxxx.trycloudflare.com
-```
-
-将此地址填入页面弹窗的 CORS 代理输入框（末尾加 `/?url=`）：
-
-```
-https://xxxx.trycloudflare.com/?url=
-```
-
-保存 → 测试连通 → 登录 PikPak。
-
-> 隧道地址每次启动都会变化，脚本启动时会自动打印在终端。`cloudflared.exe` 会在首次运行时自动下载。
-
-**方法二：Chrome 允许不安全源（仅本机用）**
-
-1. 打开 `chrome://flags/#unsafely-treat-insecure-origin-as-secure`
-2. 添加 `http://127.0.0.1:3000` 和 `http://10.151.76.88:3000`
-3. 重启浏览器
-4. 在 GitHub Pages 的 PikPak 弹窗填入 `http://127.0.0.1:3000/?url=`
-
-#### 本地直接访问（最简单）
-
-浏览器打开 `http://localhost:3000` 即是完整页面，同源访问无需任何代理配置。数据存在本机 IndexedDB，与 GitHub Pages 隔离。
-
-> 💡 建议日常使用 `http://localhost:3000`，只在需要从 GitHub Pages 调 PikPak API 时才用 Cloudflare Tunnel。
-
-### Cloudflare Worker
-
-`proxy/worker.js` 是 Cloudflare Worker 版本，可在 Cloudflare Dashboard 中创建 Worker 使用。
-
----
-
-## 部署 Telegram Bot
-
-`telegram-bot/` 是一个 Node.js Telegram 客户端，通过 MTProto (gramjs) 登录你的 Telegram 账号，解析 t.me 链接中的视频/图片，并转发到 @PikPak_Bot 离线下载。
-
-### 功能
-
-- **解析 t.me 链接**：从频道/群组消息中提取视频、图片、磁力链接
-- **相册支持**：自动检测 groupedId，获取相册中的所有媒体
-- **私密频道检测**：检测频道是否禁止转发（`noforwards`），卡片上显示 🔒 图标，离线时打开 t.me 链接
-- **转发到 @PikPak_Bot**：非私密频道的视频直接通过 MTProto `InputMediaDocument` 转发
-- **缩略图**：自动下载视频缩略图，取最大可用尺寸
-
-### 安装与运行
+### 部署 Telegram Bot
 
 ```bash
 cd telegram-bot
 npm install
 ```
 
-### 配置
-
 复制 `.env.example` 为 `.env`，填入：
 
 ```env
-API_ID=你的API_ID              # 从 https://my.telegram.org/apps 获取
+API_ID=你的API_ID              # https://my.telegram.org/apps
 API_HASH=你的API_HASH
-BOT_TOKEN=你的Bot_Token        # 从 @BotFather 创建
+BOT_TOKEN=你的Bot_Token        # @BotFather 创建
 BOT_USERNAME=你的Bot用户名
-ALLOWED_USER_ID=你的Telegram用户ID  # 可选，限制 Bot 只接受你的命令
-TARGET_BOT_USERNAME=@PikPak_Bot    # 目标 Bot
-PORT=19876                         # HTTP API 端口
+ALLOWED_USER_ID=你的TG用户ID   # 可选，限制 Bot 只接受你的命令
+TARGET_BOT_USERNAME=@PikPak_Bot
+PORT=19876
 ```
 
-### 启动
+启动：双击 `start_bot.bat` 或 `node telegram-bot/index.js`
 
-Windows 双击 `start_bot.bat`，或命令行：
+首次启动需要扫码或手机号登录 Telegram 账号。
+
+**Bot API 端点：**
+
+| 端点 | 用途 |
+|------|------|
+| `POST /api/resolve-tg-link` | 解析 t.me 链接，下载图片，创建 pending 卡片 |
+| `POST /api/resolve-tg-file` | 轻量解析，仅返回文件元数据（不下图不入队列） |
+| `POST /api/forward-to-pikpak/:fileId` | 转发文件到 @PikPak_Bot |
+| `GET /api/pending` | 获取待导入卡片列表 |
+| `DELETE /api/pending/:id` | 删除指定待导入卡片 |
+| `GET /api/doc-map` | 获取全量文件映射（旧卡片迁移用） |
+| `GET /api/doc-map-entry/:docId` | 获取单个映射条目 |
+| `POST /api/telethon/send-code` | 发送 Telegram 登录验证码 |
+| `POST /api/telethon/sign-in` | 验证码登录 |
+| `POST /api/telethon/check-2fa` | 检查是否需要两步验证 |
+
+### 部署 CORS 代理（仅无扩展时需要）
+
+一键部署到 Vercel：[![Deploy to Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/ericvlog/Pikpak-Magnet-Collection)
+
+部署后在页面「PikPak 登录」弹窗底部填入代理地址。
+
+### 本地直接访问
 
 ```bash
-node telegram-bot/index.js
+node proxy/server.js
+# 浏览器打开 http://localhost:3000
 ```
 
-首次启动需要扫码或手机号登录 Telegram 账号（用户 session，用于 MTProto 操作）。
-
-### 工作流
-
-```
-用户复制 t.me 链接
-  → 页面/扩展检测到链接
-  → POST /api/resolve-tg-link
-  → gramjs 获取消息及媒体
-     ├── 视频 → 注册 docMap，创建 pending card（附 fileMeta）
-     ├── 图片 → 下载缩略图
-     └── 磁力 → 提取磁力链接
-  → 用户点击「离线」
-     ├── 私密频道 → 打开 t.me 链接
-     └── 普通频道 → 转发 InputMediaDocument 到 @PikPak_Bot
-         ├── 优先使用卡片自带的 fileMeta（无 docMap 依赖）
-         ├── 降级到 docMap（旧卡片）
-         └── 文件引用过期 → 自动重新解析 TS 链接并重试
-```
-
-### API
-
-| 端点 | 方法 | 说明 |
-|------|------|------|
-| `/api/resolve-tg-link` | POST | 解析 t.me 链接，返回媒体信息和 pending 状态 |
-| `/api/resolve-tg-file` | POST | 轻量解析 t.me 链接，仅返回文件元数据（不下图、不入队列） |
-| `/api/forward-to-pikpak/:fileId` | POST | 转发文件到 @PikPak_Bot（支持卡片自带的 fileMeta 或 docMap 降级） |
-| `/api/pending` | GET | 获取所有 pending 卡片 |
-| `/api/pending/:id` | DELETE | 删除指定 pending 卡片 |
-| `/api/add` | POST | 手动添加条目（供扩展调用） |
-| `/api/doc-map` | GET | 获取全量 docMap（旧卡片迁移用） |
-| `/api/doc-map-entry/:docId` | GET | 获取单个 docMap 条目 |
-| `/api/telethon/status` | GET | 检查用户 session 登录状态 |
-| `/api/telethon/send-code` | POST | 发送 Telegram 登录验证码 |
-| `/api/telethon/sign-in` | POST | 验证码登录 |
-| `/api/telethon/check-2fa` | POST | 检查是否需要两步验证密码 |
+同源访问，无需任何代理配置。
 
 ---
 
-## PikPak 登录
-
-扩展和页面各自独立维护 Token（不共享），可以都登录、互不影响。
-
-### 扩展登录（推荐）
-
-在扩展设置页输入账号密码 → 点「登录 PikPak」→ 扩展自动完成登录、Token 刷新。
-
-### 页面登录
-
-页面有两种方式调 PikPak API（按优先级）：
-1. **扩展桥接**（优先）：页面通过 `postMessage` 发给扩展，扩展在后台直接调 API
-2. **CORS 代理**（备选）：页面通过你部署的 CORS 代理调 API
-
-无论哪种方式，页面登录的凭证存储在浏览器 `localStorage` 中。
-
----
-
-## 使用教程
-
-### 完整工作流：发现磁力 → 预览 → 保存
-
-1. **发现磁力**：任意网页上点击磁力链接 → 扩展弹出「预览」按钮；或复制磁力链接 → 管理器页面自动检测剪贴板
-2. **预览**：查看标题、截图、文件大小、类型
-3. **编辑**：预览弹窗中**直接点击标题即可编辑**（contenteditable）
-4. **操作**：选择「保存到管理器」「离线下载到 PikPak」「保存并离线」
-5. **整理**：在管理器中添加标签、评分、分类
-
-### 批量选择与操作
-
-1. 卡片右上角勾选复选框（或直接点击卡片进入选择模式）
-2. 底部浮动工具栏出现，支持：
-   - 🏷️ 批量添加标签
-   - 🔗 批量复制磁力链接
-   - 💾 批量保存图片到本地
-   - 📥 **批量离线到 PikPak**（可选目标文件夹）
-   - 🗑️ 批量删除
-3. Shift + 点击可连续多选，Ctrl + 点击可跳选
-
-### 429 预览失败处理流程
-
-预览服务（whatslink.info）有频率限制，返回 429 时：
-
-1. **自动记录**：失败的磁力自动保存到「⚠️ 预览失败 (429)」列表（侧边栏入口，最多 50 条）
-2. **存储位置**：装了扩展 → 存扩展 `chrome.storage` | 无扩展 → 存 `localStorage`
-3. **重试**：在失败列表中点击「🔍 预览」重新拉取；预览成功并保存后状态自动更新为「✅ 完成」
-4. **批量导入**：点击「📥 导入全部」将全部失败磁力导入管理器（跳过已存在的）；或逐条「📥 导入」
-5. **清空**：导入确认无误后点击「🗑️ 清空全部」
-
-> 429 记录的磁力仅包含磁力链接和标题（无截图），导入后可在卡片上手动补图片。
-
-### 备份策略说明
-
-| 备份方式 | 位置 | 包含图片 | 增量/全量 | 适用场景 |
-|---------|------|---------|----------|---------|
-| 导出单文件 | 侧边栏 → 导出数据(单文件) | ❌ 不含 | 全量 | 快速备份元数据 |
-| 完整备份 ZIP | 侧边栏 → 完整备份（含图片） | ✅ 含 | 全量 | 迁移/换设备 |
-| Google Drive 云备份 | 侧边栏 → 云端管理 → 备份 | ✅ 含 | **增量** | 日常自动备份 |
-
-#### Google Drive 增量备份原理
-
-1. 首次备份：上传所有卡片 + 图片到云端
-2. 后续备份：对比本地 `updatedAt` 和云端记录，只上传新增或修改过的卡片/图片
-3. 已备份的 ID 记录在备份元数据中，避免重复上传
-4. 恢复同理：只下载本地没有的卡片/图片
-
-#### 注意事项
-
-- 增量备份不会删除云端数据，手动清理需用「🧹 清理云端孤儿图片」
-- ZIP 恢复会覆盖本地所有数据，请谨慎操作
-- Google Drive 有配额限制（免费用户约 15GB），备份时会显示已用/总量
-
----
-
-| 功能 | 说明 |
-|------|------|
-| **磁力管理** | 添加、编辑、删除磁力链接，支持标题、标签、评分、预览图 |
-| **标签系统** | 创建标签、拖拽排序、按标签筛选、自动标签规则 |
-| **评分筛选** | 1-5 星评分，支持按评分过滤 |
-| **搜索** | 按标题或标签关键词搜索 |
-| **分页加载** | 可配置每页加载数量（20/50/100/200） |
-| **批量操作** | 批量添加标签、复制链接、保存图片、删除 |
-| **预览图管理** | 上传图片、粘贴网络图片链接、转换网络图片为本地存储 |
-| **暗色模式** | 白天/夜晚模式切换 |
-| **数据导入导出** | 单文件 JSON 导出/导入（不含图片） |
-| **完整备份/恢复** | ZIP 包导出（含图片二进制），支持从文件夹导入图片 |
-| **剪贴板监视** | 自动检测剪贴板中的磁力链接并导入 |
-| **自动导入** | 定时从扩展待导入队列拉取磁力 |
-| **重复检测** | 检测并清理重复磁力（支持精确/模糊匹配） |
-| **标题过滤词** | 管理自动清理标题中的广告词 |
-| **429 失败管理** | 预览失败的磁力可稍后重试、批量导入 |
-| **失败列表** | 图片转换失败的磁力列表，支持重试 |
-| **Telegram 元数据刷新** | 单卡/批量刷新 Telegram 视频文件元数据（fileMeta 自持，不依赖 Bot docMap） |
-| **旧卡片迁移** | 一键将 docMap 中的文件元数据迁移到卡片本地（fileMeta），实现完全自持 |
-| **批量添加自动解析** | 保存磁力前自动从 whatslink.info 获取标题、截图、大小 |
-| **筛选增强** | 新增「无图片」「电报卡片」筛选选项 |
-
----
-
-## 备份与还原
-
-### 本地备份
-
-- **导出单文件**（不含图片）：侧边栏 → 导出数据(单文件)
-- **完整备份**（含图片 ZIP）：侧边栏 → 完整备份（含图片）
-- **恢复完整备份**：侧边栏 → 恢复完整备份，选择 `.zip` 文件
-
-### Google Drive 云备份（实验性）
-
-> 需要 Google 账号授权。Token 存储在 `localStorage`。
-
-- **云端备份**：侧边栏 → 云端管理 → "☁️ 上传备份" 按钮
-  - 增量备份，只上传新增和变化的卡片/图片
-  - 备份元数据记录已备份的 ID，避免重复
-- **云端恢复**：侧边栏 → 云端管理 → "从云端恢复"
-  - 增量恢复，只下载本地没有的卡片/图片
-  - 支持覆盖本地数据
-- **图片清理**：清除云端孤立图片（无卡片引用的）
-
----
-
-## 目录结构
+## 📁 目录结构
 
 ```
 /
-├── api/
-│   └── proxy/index.js    ← Vercel Serverless CORS 代理（部署入口）
-├── extension/             ← Chrome 扩展
-│   ├── background.js      ← 后台 Service Worker
-│   ├── content.js          ← 内容脚本（页面桥接通信）
-│   ├── inject.js           ← 主世界注入标志
-│   ├── magnet-detector.js  ← 磁力嗅探与预览弹窗
-│   ├── pikpak-token.js     ← PikPak 页面 Token 捕获
-│   ├── manifest.json       ← 扩展清单
-│   ├── options.html        ← 扩展设置页
-│   └── options.js          ← 设置页逻辑
-├── page/
-│   └── index.html          ← 磁力管理器静态页面（GitHub Pages 入口）
-├── proxy/
-│   ├── server.js           ← 本地 Node.js 代理服务器
-│   ├── worker.js           ← Cloudflare Worker 代理
-│   ├── start-server.bat    ← Windows 一键启动脚本（含 Cloudflare Tunnel）
-│   └── cloudflared.exe     ← Cloudflare Tunnel 客户端（首次自动下载）
-├── telegram-bot/           ← Telegram Bot（gramjs MTProto 客户端）
-│   ├── index.js            ← Express 服务器 + gramjs 客户端
-│   ├── .env.example        ← 配置模板（API_ID、API_HASH、BOT_TOKEN）
-│   ├── docMap.json         ← 已注册的 document 映射（自动生成）
-│   ├── pending.json        ← 待处理的 t.me 卡片（自动生成）
-│   ├── images/             ← 下载的缩略图（自动生成）
-│   └── start_bot.bat       ← Windows 一键启动
-├── .gitignore              ← 排除 *.exe、node_modules/、telegram-bot 运行时数据
-├── package.json            ← Vercel Node.js 项目配置
+├── page/index.html            ← 磁力管理器页面（GitHub Pages 入口）
+├── extension/                  ← Chrome 扩展
+│   ├── manifest.json
+│   ├── content.js              ← 页面桥接通信
+│   ├── background.js           ← 后台 Service Worker
+│   ├── magnet-detector.js      ← 磁力嗅探与预览弹窗
+│   ├── options.html / .js      ← 扩展设置页
+│   └── pikpak-token.js         ← PikPak Token 捕获
+├── telegram-bot/               ← Telegram Bot（gramjs MTProto）
+│   ├── index.js                ← Express 服务器 + gramjs 客户端
+│   ├── .env.example
+│   └── start_bot.bat
+├── proxy/                      ← CORS 代理
+│   ├── server.js               ← 本地 Node.js 代理
+│   ├── worker.js               ← Cloudflare Worker
+│   └── start-server.bat
+├── api/proxy/index.js          ← Vercel Serverless 代理
 └── README.md
 ```
-
-## 开发说明
-
-### 本地启动
-
-```bash
-# 启动本地代理（同时提供 API 和页面）
-node proxy/server.js
-
-# 浏览器打开
-open http://localhost:3000
-```
-
-### 加载未打包扩展
-
-`chrome://extensions` → 开发者模式 → 加载已解压的扩展程序 → 选择 `extension/` 目录。
-
----
-
-## 技术栈
-
-- **页面**：原生 JavaScript + IndexedDB + CSS Variables
-- **扩展**：Chrome Extension Manifest V3
-- **代理**：Vercel Serverless (Node.js) / Cloudflare Worker
-- **云备份**：Google Drive API (REST v3)
-- **图片压缩**：JSZip + IndexedDB Blob Storage
