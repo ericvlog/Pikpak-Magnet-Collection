@@ -1627,7 +1627,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             }
             await test('首页', 'https://whatslink.info/');
             await test('API', 'https://whatslink.info/api/v1/link?url=magnet:?xt=urn:btih:49bbf852e1079e399b43531a79ca571d6e962d87');
-            await test('图片', 'https://whatslink.info/image/713877e51b2afcaffcdfda98b28b0147');
             sendResponse({ success: true, data: results });
         })();
         return true;
