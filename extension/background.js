@@ -1394,17 +1394,61 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     // ===== 转发到 @PikPakBot =====
     if (request.action === 'forwardToPikpakBot') {
-        console.log('[后台] forwardToPikpakBot:', request.fileId?.substring(0, 20) + '...');
+        const fileId = request.fileId;
+        const fileMeta = request.fileMeta || {};
+        console.log('[后台] forwardToPikpakBot:', fileId?.substring(0, 20) + '...', 'hasFileMeta:', Object.keys(fileMeta).length > 0);
         (async () => {
             try {
                 const cfg = await chrome.storage.local.get(['botPort']);
                 const port = cfg.botPort || 19876;
-                const resp = await fetch(`http://localhost:${port}/api/forward-to-pikpak/${encodeURIComponent(request.fileId)}`, { method: 'POST' });
+                const resp = await fetch(`http://localhost:${port}/api/forward-to-pikpak/${encodeURIComponent(fileId)}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fileMeta }),
+                });
                 const data = await resp.json();
-                sendResponse({ success: data.success, error: data.error });
+                sendResponse({ success: data.success, error: data.error, errorCode: data.errorCode || '' });
             } catch (err) {
                 console.error('[后台] forwardToPikpakBot 失败:', err.message);
-                sendResponse({ success: false, error: err.message });
+                sendResponse({ success: false, error: err.message, errorCode: 'NETWORK' });
+            }
+        })();
+        return true;
+    }
+
+    if (request.action === 'resolveTgFile') {
+        const { messageUrl, docId } = request;
+        console.log('[后台] resolveTgFile:', messageUrl, docId ? `docId=${docId.substring(0,8)}...` : '');
+        (async () => {
+            try {
+                const cfg = await chrome.storage.local.get(['botPort']);
+                const port = cfg.botPort || 19876;
+                const resp = await fetch(`http://localhost:${port}/api/resolve-tg-file`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: messageUrl, docId }),
+                });
+                const data = await resp.json();
+                sendResponse({ success: data.success, error: data.error, fileMeta: data.fileMeta || null, errorCode: data.errorCode || '' });
+            } catch (err) {
+                console.error('[后台] resolveTgFile 失败:', err.message);
+                sendResponse({ success: false, error: err.message, fileMeta: null, errorCode: 'NETWORK' });
+            }
+        })();
+        return true;
+    }
+
+    if (request.action === 'docMap') {
+        (async () => {
+            try {
+                const cfg = await chrome.storage.local.get(['botPort']);
+                const port = cfg.botPort || 19876;
+                const resp = await fetch(`http://localhost:${port}/api/doc-map`);
+                const data = await resp.json();
+                sendResponse({ success: true, docMap: data });
+            } catch (err) {
+                console.error('[后台] docMap 失败:', err.message);
+                sendResponse({ success: false, error: err.message, docMap: {} });
             }
         })();
         return true;

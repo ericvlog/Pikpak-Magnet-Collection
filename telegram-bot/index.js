@@ -79,9 +79,7 @@ function saveDocMap(map) {
     retryFs(() => fs.writeFileSync(DOC_MAP_FILE, JSON.stringify(map, null, 2), 'utf-8'));
 }
 
-function addDocEntry(doc, { peer = '', msgId = 0 } = {}) {
-    const map = loadDocMap();
-    const id = uuidv4();
+function buildFileMeta(doc, { peer = '', msgId = 0 } = {}) {
     let fileName = '';
     if (doc.attributes) {
         for (const attr of doc.attributes) {
@@ -91,7 +89,7 @@ function addDocEntry(doc, { peer = '', msgId = 0 } = {}) {
             }
         }
     }
-    map[id] = {
+    return {
         id: String(doc.id),
         accessHash: String(doc.accessHash),
         fileReference: doc.fileReference ? doc.fileReference.toString('base64') : '',
@@ -103,6 +101,12 @@ function addDocEntry(doc, { peer = '', msgId = 0 } = {}) {
         peer,
         msgId,
     };
+}
+
+function addDocEntry(doc, opts = {}) {
+    const map = loadDocMap();
+    const id = uuidv4();
+    map[id] = buildFileMeta(doc, opts);
     saveDocMap(map);
     return id;
 }
@@ -913,11 +917,13 @@ app.post('/api/telethon/logout', async (req, res) => {
 });
 
 // ===== 转发消息到 @PikPakBot =====
-// 支持两种 fileId:
-//   - 普通 Bot API file_id（查 fileMap → findMtprotoMessage）
+// 支持三种模式:
+//   - 请求体带 fileMeta → 直接用（卡片自包含）
 //   - doc:uuid（查 docMap → 直接用存储的 MTProto 文档信息）
+//   - 普通 Bot API file_id（查 fileMap → findMtprotoMessage）
 app.post('/api/forward-to-pikpak/:fileId', async (req, res) => {
     const fileId = req.params.fileId;
+    const { fileMeta } = req.body || {};
 
     let client;
     try {
@@ -930,26 +936,41 @@ app.post('/api/forward-to-pikpak/:fileId', async (req, res) => {
 
         if (fileId.startsWith('doc:')) {
             const docId = fileId.slice(4);
-            const docMap = loadDocMap();
-            const docEntry = docMap[docId];
+            // 优先使用请求体中的 fileMeta（卡片自包含模式）
+            let docEntry = fileMeta && fileMeta[fileId];
+            if (!docEntry) {
+                // fallback 到 docMap（旧卡片）
+                const docMap = loadDocMap();
+                docEntry = docMap[docId];
+            }
             if (!docEntry) {
                 console.log(`[转发] ❌ doc:${docId.substring(0, 8)}... 不存在`);
-                return res.status(404).json({ error: '文档信息已过期或不存在（请重新解析 t.me 链接）' });
+                return res.status(404).json({ error: '文档信息已过期或不存在（请重新解析 t.me 链接）', errorCode: 'DOC_NOT_FOUND' });
             }
             console.log(`[转发] 处理 doc:${docId.substring(0, 8)}... id=${docEntry.id} file=${docEntry.fileName} msgId=${docEntry.msgId}`);
-            await sendDocumentToPikpak(client, {
-                id: BigInt(docEntry.id),
-                accessHash: BigInt(docEntry.accessHash),
-                fileReference: Buffer.from(docEntry.fileReference, 'base64'),
-                fileName: docEntry.fileName || '',
-                peer: docEntry.peer || '',
-                msgId: docEntry.msgId || 0,
-                date: docEntry.date || 0,
-                mimeType: docEntry.mimeType || 'video/mp4',
-                size: docEntry.size || '0',
-                dcId: docEntry.dcId || 1,
-            });
-            removeDocEntry(docId);
+            try {
+                await sendDocumentToPikpak(client, {
+                    id: BigInt(docEntry.id),
+                    accessHash: BigInt(docEntry.accessHash),
+                    fileReference: Buffer.from(docEntry.fileReference, 'base64'),
+                    fileName: docEntry.fileName || '',
+                    peer: docEntry.peer || '',
+                    msgId: docEntry.msgId || 0,
+                    date: docEntry.date || 0,
+                    mimeType: docEntry.mimeType || 'video/mp4',
+                    size: docEntry.size || '0',
+                    dcId: docEntry.dcId || 1,
+                });
+            } catch (sendErr) {
+                const msg = sendErr.message || '';
+                if (msg.includes('FILE_REFERENCE') || msg.includes('file reference') || msg.includes('FILE_REF_EXPIRED')) {
+                    console.log(`[转发] ⚠️ doc:${docId.substring(0, 8)}... fileReference 过期`);
+                    return res.json({ success: false, error: '文件引用已过期', errorCode: 'FILE_REF_EXPIRED' });
+                }
+                throw sendErr;
+            }
+            // 仅当从 docMap 读取时才清理（fileMeta 模式卡片自持，不需清理）
+            if (!(fileMeta && fileMeta[fileId])) removeDocEntry(docId);
             console.log(`[转发] ✅ doc:${docId.substring(0, 8)}... id=${docEntry.id} → ${TARGET_BOT} 成功`);
             res.json({ success: true });
             return;
@@ -974,8 +995,71 @@ app.post('/api/forward-to-pikpak/:fileId', async (req, res) => {
         res.json({ success: true });
     } catch (err) {
         console.error(`[转发] 失败: ${err.message}`);
+        res.json({ success: false, error: err.message, errorCode: 'OTHER' });
+    }
+});
+
+// ===== 仅获取 t.me 链接的 fileMeta（不下图、不入队列、不写 docMap）=====
+app.post('/api/resolve-tg-file', async (req, res) => {
+    const { url, docId } = req.body;
+    if (!url) return res.status(400).json({ error: '缺少 url' });
+
+    try {
+        const { peer, msgId } = parseTgLink(url);
+
+        const client = await getUserClient();
+        if (!client) return res.status(503).json({ error: '用户未登录' });
+        if (!client.connected) await client.connect();
+        if (!(await client.checkAuthorization())) {
+            return res.status(401).json({ error: '用户 session 已过期' });
+        }
+
+        const entity = await client.getInputEntity(peer);
+        const msgs = await client.getMessages(entity, { ids: [msgId] });
+        const msg = msgs[0];
+        if (!msg) return res.json({ error: '未找到消息' });
+
+        let messages = [msg];
+        if (msg.groupedId) {
+            const msgIds = [];
+            for (let i = Math.max(1, msgId - 15); i <= msgId + 15; i++) msgIds.push(i);
+            const recent = await client.getMessages(entity, { ids: msgIds });
+            messages = recent.filter(m => m && String(m.groupedId) === String(msg.groupedId))
+                .sort((a, b) => Number(a.id) - Number(b.id));
+        }
+
+        const fileMeta = {};
+        for (let i = 0; i < messages.length; i++) {
+            const m = messages[i];
+            if (!m.media || !m.media.document) continue;
+            const doc = m.media.document;
+            if (!doc.mimeType?.startsWith('video/')) continue;
+            // 如果传入了 docId 且只有单个视频，复用原 key 避免卡片 fileId 失效
+            let docKey;
+            if (docId && messages.filter(mm => mm.media?.document?.mimeType?.startsWith('video/')).length === 1) {
+                docKey = 'doc:' + docId;
+            } else {
+                docKey = 'doc:' + uuidv4();
+            }
+            fileMeta[docKey] = buildFileMeta(doc, { peer: String(peer), msgId: m.id });
+        }
+
+        res.json({ success: true, fileMeta });
+    } catch (err) {
+        console.error('[resolveTgFile] 失败:', err.message);
         res.json({ success: false, error: err.message });
     }
+});
+
+// ===== docMap 全量查询 + 条目查询（供旧卡片迁移使用）=====
+app.get('/api/doc-map', (req, res) => {
+    res.json(loadDocMap());
+});
+app.get('/api/doc-map-entry/:docId', (req, res) => {
+    const docMap = loadDocMap();
+    const entry = docMap[req.params.docId];
+    if (!entry) return res.status(404).json({ error: '找不到该 docMap 条目' });
+    res.json({ success: true, entry });
 });
 
 // ===== 解析 t.me 链接，抓取原文媒体并创建 pending =====
@@ -1029,6 +1113,7 @@ app.post('/api/resolve-tg-link', async (req, res) => {
         let extraImages = [];
         let videoCount = 0;
         let fileIds = [];
+        const fileMeta = {};
 
         for (const m of messages) {
             if (!m.media) continue;
@@ -1045,7 +1130,9 @@ app.post('/api/resolve-tg-link', async (req, res) => {
 
                 videoCount++;
                 const docId = addDocEntry(doc, { peer: String(peer), msgId: m.id });
-                fileIds.push('doc:' + docId);
+                const docKey = 'doc:' + docId;
+                fileIds.push(docKey);
+                fileMeta[docKey] = buildFileMeta(doc, { peer: String(peer), msgId: m.id });
                 // 下载最大尺寸缩略图
                 const thumbCount = (doc.thumbs || []).length;
                 for (let idx = thumbCount - 1; idx >= 0; idx--) {
@@ -1090,6 +1177,7 @@ app.post('/api/resolve-tg-link', async (req, res) => {
             messageUrl,
             fileId: fileIds[0] || '',
             fileIds,
+            fileMeta,
             groupedId,
             restricted
         });

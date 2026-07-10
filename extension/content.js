@@ -343,8 +343,25 @@ window.addEventListener('message', (event) => {
     // --- 转发到 @PikPakBot ---
     if (event.data.type === 'REQUEST_FORWARD_TO_PIKPAK') {
         const fileId = event.data.fileId;
-        sendMessageToBackground({ action: 'forwardToPikpakBot', fileId }, (response) => {
-            window.postMessage({ type: 'FORWARD_TO_PIKPAK_RESULT', success: response?.success || false, error: response?.error || '' }, '*');
+        const fileMeta = event.data.fileMeta || {};
+        sendMessageToBackground({ action: 'forwardToPikpakBot', fileId, fileMeta }, (response) => {
+            window.postMessage({ type: 'FORWARD_TO_PIKPAK_RESULT', success: response?.success || false, error: response?.error || '', errorCode: response?.errorCode || '' }, '*');
+        });
+    }
+
+    // --- 获取全量 docMap（旧卡片迁移用） ---
+    if (event.data.type === 'REQUEST_DOC_MAP') {
+        sendMessageToBackground({ action: 'docMap' }, (response) => {
+            window.postMessage({ type: 'DOC_MAP_RESULT', success: response?.success || false, docMap: response?.docMap || {}, error: response?.error || '' }, '*');
+        });
+    }
+
+    // --- 轻量解析 t.me 链接（仅解析文件元数据，不下图不入队列） ---
+    if (event.data.type === 'REQUEST_RESOLVE_TG_FILE') {
+        const messageUrl = event.data.messageUrl;
+        const docId = event.data.docId || '';
+        sendMessageToBackground({ action: 'resolveTgFile', messageUrl, docId }, (response) => {
+            window.postMessage({ type: 'RESOLVE_TG_FILE_RESULT', success: response?.success || false, error: response?.error || '', fileMeta: response?.fileMeta || null, errorCode: response?.errorCode || '' }, '*');
         });
     }
 
