@@ -4581,6 +4581,7 @@ const magnetLinkEl = m.magnetLink ? `<a href="${escapeHtml(m.magnetLink)}" class
         const docKeys = Object.keys(docMap);
         if (docKeys.length === 0) { hideProgressModal(); showToast('docMap 为空，无需迁移', false); return; }
         let ok = 0, skip = 0;
+        const skippedTitles = [];
         for (let i = 0; i < magnets.length; i++) {
             const card = magnets[i];
             const fileIds = [];
@@ -4596,7 +4597,7 @@ const magnetLinkEl = m.magnetLink ? `<a href="${escapeHtml(m.magnetLink)}" class
                     migrated = true;
                 }
             }
-            if (migrated) ok++; else if (uniqueIds.length > 0) skip++;
+            if (migrated) ok++; else if (uniqueIds.length > 0) { skip++; skippedTitles.push(card.title); }
             updateProgress(i + 1, magnets.length, ok, skip, `正在迁移...（找到 ${docKeys.length} 条 docMap 条目）`);
         }
         await saveToDB();
@@ -4604,7 +4605,12 @@ const magnetLinkEl = m.magnetLink ? `<a href="${escapeHtml(m.magnetLink)}" class
         currentLoadedCount = 0;
         renderLoadedCards();
         hideProgressModal();
-        showToast(`📤 迁移完成: ${ok} 张卡片已更新, ${skip} 张未匹配到 docMap`, skip > 0);
+        let msg = `📤 迁移完成: ${ok} 张卡片已更新`;
+        if (skippedTitles.length > 0) {
+            msg += `, ${skippedTitles.length} 张未匹配：${skippedTitles.join('、')}`;
+            msg += '。可在对应卡片上点「🔄 更新」按钮手动刷新';
+        }
+        showToast(msg, skippedTitles.length > 0);
     }
 
     async function batchRefreshMeta() {
