@@ -3523,10 +3523,13 @@ function loginGDrive() {
     async function resolveBatchItemMetadata(magnet) {
         try {
             const data = await magnetPreviewWithFallback(magnet);
+            const shots = collectShots(data);
+            const firstShot = shots.find(s => s.src && s.src.startsWith('http'));
+            const rawSize = parseInt(data.size, 10);
             return {
                 title: data.name || '',
-                size: data.size || '',
-                imageUrl: data.imageUrl || ''
+                size: rawSize ? formatSize(rawSize) : (data.size || ''),
+                imageUrl: firstShot ? firstShot.src : ''
             };
         } catch (err) {
             if (err.message === '429') throw err;
