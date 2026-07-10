@@ -4607,10 +4607,10 @@ const magnetLinkEl = m.magnetLink ? `<a href="${escapeHtml(m.magnetLink)}" class
         hideProgressModal();
         let msg = `📤 迁移完成: ${ok} 张卡片已更新`;
         if (skippedTitles.length > 0) {
-            msg += `, ${skippedTitles.length} 张未匹配：${skippedTitles.join('、')}`;
-            msg += '。可在对应卡片上点「🔄 更新」按钮手动刷新';
+            msg += `\n\n未匹配到 docMap 的卡片（共 ${skippedTitles.length} 张）：\n${skippedTitles.join('\n')}`;
+            msg += '\n\n可搜索标题找到对应卡片，点「🔄 更新」按钮手动刷新';
         }
-        showToast(msg, skippedTitles.length > 0);
+        alert(msg);
     }
 
     async function batchRefreshMeta() {
