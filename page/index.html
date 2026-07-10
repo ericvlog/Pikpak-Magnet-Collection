@@ -3519,6 +3519,21 @@ function loginGDrive() {
         });
     }
 
+    // ----- 批量保存前解析磁力元数据 -----
+    async function resolveBatchItemMetadata(magnet) {
+        try {
+            const data = await magnetPreviewWithFallback(magnet);
+            return {
+                title: data.name || '',
+                size: data.size || '',
+                imageUrl: data.imageUrl || ''
+            };
+        } catch (err) {
+            if (err.message === '429') throw err;
+            return { title: '', size: '', imageUrl: '' };
+        }
+    }
+
     // ================================================================
     // 剪贴板监视
     // ================================================================
@@ -3863,8 +3878,8 @@ function loginGDrive() {
         // 绑定事件
         container.querySelectorAll('.preview-btn').forEach(btn => { btn.onclick = () => { const idx = parseInt(btn.dataset.index); const magnet = batchItems[idx].magnet; const onUpdateBatchItem = (status) => { batchItems[idx].status = status; renderBatchList(); saveBatchItemsToStorage(); }; showCardPreview(magnet, '', onUpdateBatchItem); }; });
         container.querySelectorAll('.offline-btn').forEach(btn => { btn.onclick = async () => { const idx = parseInt(btn.dataset.index); const magnet = batchItems[idx].magnet; try { await sendToPikPakViaBridge(magnet); batchItems[idx].status = 'success'; } catch (err) { batchItems[idx].status = 'error'; } renderBatchList(); saveBatchItemsToStorage(); }; });
-        container.querySelectorAll('.save-btn').forEach(btn => { btn.onclick = async () => { const idx = parseInt(btn.dataset.index); const magnet = batchItems[idx].magnet; try { await new Promise((resolve, reject) => { const handler = (event) => { if (event.data && event.data.type === 'SAVE_MAGNET_RESULT') { window.removeEventListener('message', handler); if (event.data.success) resolve(true); else reject(new Error(event.data.error || '保存失败')); } }; window.addEventListener('message', handler); window.postMessage({ type: 'REQUEST_SAVE_MAGNET', magnet: magnet, title: '', size: '', imageUrl: '' }, '*'); setTimeout(() => { window.removeEventListener('message', handler); reject(new Error('超时')); }, 10000); }); batchItems[idx].status = 'success'; } catch (err) { batchItems[idx].status = 'error'; } renderBatchList(); saveBatchItemsToStorage(); }; });
-        container.querySelectorAll('.both-btn').forEach(btn => { btn.onclick = async () => { const idx = parseInt(btn.dataset.index); const magnet = batchItems[idx].magnet; try { await Promise.all([ sendToPikPakViaBridge(magnet), new Promise((resolve, reject) => { const handler = (event) => { if (event.data && event.data.type === 'SAVE_MAGNET_RESULT') { window.removeEventListener('message', handler); if (event.data.success) resolve(true); else reject(new Error(event.data.error || '保存失败')); } }; window.addEventListener('message', handler); window.postMessage({ type: 'REQUEST_SAVE_MAGNET', magnet: magnet, title: '', size: '', imageUrl: '' }, '*'); setTimeout(() => { window.removeEventListener('message', handler); reject(new Error('超时')); }, 10000); }) ]); batchItems[idx].status = 'success'; } catch (err) { batchItems[idx].status = 'error'; } renderBatchList(); saveBatchItemsToStorage(); }; });
+        container.querySelectorAll('.save-btn').forEach(btn => { btn.onclick = async () => { const idx = parseInt(btn.dataset.index); const magnet = batchItems[idx].magnet; let meta = { title: '', size: '', imageUrl: '' }; try { meta = await resolveBatchItemMetadata(magnet); } catch (e) { if (e.message === '429') { batchItems[idx].status = 'error'; renderBatchList(); saveBatchItemsToStorage(); showToast('预览服务繁忙，稍后重试', true); return; } } try { await new Promise((resolve, reject) => { const handler = (event) => { if (event.data && event.data.type === 'SAVE_MAGNET_RESULT') { window.removeEventListener('message', handler); if (event.data.success) resolve(true); else reject(new Error(event.data.error || '保存失败')); } }; window.addEventListener('message', handler); window.postMessage({ type: 'REQUEST_SAVE_MAGNET', magnet: magnet, title: meta.title, size: meta.size, imageUrl: meta.imageUrl }, '*'); setTimeout(() => { window.removeEventListener('message', handler); reject(new Error('超时')); }, 10000); }); batchItems[idx].status = 'success'; } catch (err) { batchItems[idx].status = 'error'; } renderBatchList(); saveBatchItemsToStorage(); }; });
+        container.querySelectorAll('.both-btn').forEach(btn => { btn.onclick = async () => { const idx = parseInt(btn.dataset.index); const magnet = batchItems[idx].magnet; let meta = { title: '', size: '', imageUrl: '' }; try { meta = await resolveBatchItemMetadata(magnet); } catch (e) { if (e.message === '429') { batchItems[idx].status = 'error'; renderBatchList(); saveBatchItemsToStorage(); showToast('预览服务繁忙，稍后重试', true); return; } } try { await Promise.all([ sendToPikPakViaBridge(magnet), new Promise((resolve, reject) => { const handler = (event) => { if (event.data && event.data.type === 'SAVE_MAGNET_RESULT') { window.removeEventListener('message', handler); if (event.data.success) resolve(true); else reject(new Error(event.data.error || '保存失败')); } }; window.addEventListener('message', handler); window.postMessage({ type: 'REQUEST_SAVE_MAGNET', magnet: magnet, title: meta.title, size: meta.size, imageUrl: meta.imageUrl }, '*'); setTimeout(() => { window.removeEventListener('message', handler); reject(new Error('超时')); }, 10000); }) ]); batchItems[idx].status = 'success'; } catch (err) { batchItems[idx].status = 'error'; } renderBatchList(); saveBatchItemsToStorage(); }; });
         container.querySelectorAll('.delete-btn').forEach(btn => { btn.onclick = () => { const idx = parseInt(btn.dataset.index); batchItems.splice(idx, 1); renderBatchList(); saveBatchItemsToStorage(); if (batchItems.length === 0) document.getElementById('batchParseResult').style.display = 'none'; }; });
     }
 
@@ -4896,6 +4911,8 @@ document.getElementById('pagePikpakLoginBtn').onclick = () => { ppUpdateLoginUI(
                         batchItems[i].status = 'success';
                         successCount++;
                     } else {
+                        let meta = { title: '', size: '', imageUrl: '' };
+                        try { meta = await resolveBatchItemMetadata(magnet); } catch (e) { if (e.message === '429') { batchItems[i].status = 'error'; failCount++; renderBatchList(); saveBatchItemsToStorage(); await new Promise(r => setTimeout(r, 500)); continue; } }
                         await new Promise((resolve, reject) => {
                             const handler = (event) => {
                                 if (event.data && event.data.type === 'SAVE_MAGNET_RESULT') {
@@ -4905,7 +4922,7 @@ document.getElementById('pagePikpakLoginBtn').onclick = () => { ppUpdateLoginUI(
                                 }
                             };
                             window.addEventListener('message', handler);
-                            window.postMessage({ type: 'REQUEST_SAVE_MAGNET', magnet: magnet, title: '', size: '', imageUrl: '' }, '*');
+                            window.postMessage({ type: 'REQUEST_SAVE_MAGNET', magnet: magnet, title: meta.title, size: meta.size, imageUrl: meta.imageUrl }, '*');
                             setTimeout(() => { window.removeEventListener('message', handler); reject(new Error('超时')); }, 10000);
                         });
                         batchItems[i].status = 'success';
@@ -4928,6 +4945,8 @@ document.getElementById('pagePikpakLoginBtn').onclick = () => { ppUpdateLoginUI(
                 if (batchItems[i].status === 'success') continue;
                 const magnet = batchItems[i].magnet;
                 try {
+                    let meta = { title: '', size: '', imageUrl: '' };
+                    try { meta = await resolveBatchItemMetadata(magnet); } catch (e) { if (e.message === '429') { batchItems[i].status = 'error'; failCount++; renderBatchList(); saveBatchItemsToStorage(); await new Promise(r => setTimeout(r, 500)); continue; } }
                     await sendToPikPakViaBridge(magnet);
                     await new Promise((resolve, reject) => {
                         const handler = (event) => {
@@ -4938,7 +4957,7 @@ document.getElementById('pagePikpakLoginBtn').onclick = () => { ppUpdateLoginUI(
                             }
                         };
                         window.addEventListener('message', handler);
-                        window.postMessage({ type: 'REQUEST_SAVE_MAGNET', magnet: magnet, title: '', size: '', imageUrl: '' }, '*');
+                        window.postMessage({ type: 'REQUEST_SAVE_MAGNET', magnet: magnet, title: meta.title, size: meta.size, imageUrl: meta.imageUrl }, '*');
                         setTimeout(() => { window.removeEventListener('message', handler); reject(new Error('超时')); }, 10000);
                     });
                     batchItems[i].status = 'success';
