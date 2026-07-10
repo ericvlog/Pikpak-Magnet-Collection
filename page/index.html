@@ -875,6 +875,7 @@
                 <option value="all">📋 全部</option>
                 <option value="noTag">🏷 无标签</option>
                 <option value="netImg">🌐 网络图</option>
+                <option value="noImg">🚫 无图片</option>
                 <option value="telegram">📱 电报卡片</option>
             </select>
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:nowrap;"><span style="font-size:0.8rem;white-space:nowrap;">每次加载</span><select id="pageSizeSelect" style="width:65px;"><option value="20">20</option><option value="50" selected>50</option><option value="100">100</option><option value="200">200</option></select></div>
@@ -4061,6 +4062,7 @@ function updateFilteredList() {
             if (currentRatingFilter>0 && m.rating!==currentRatingFilter) return false;
             if (filterType === 'noTag' && m.tagIds && m.tagIds.length > 0) return false;
             if (filterType === 'netImg' && (!m.imageUrl || m.imageUrl.startsWith('img_'))) return false;
+            if (filterType === 'noImg' && m.imageUrl) return false;
             if (filterType === 'telegram') {
                 const hasTelegram = m.fileId || (m.fileIds && m.fileIds.length > 0) || m.messageUrl;
                 if (!hasTelegram) return false;
