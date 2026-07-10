@@ -240,12 +240,15 @@ node telegram-bot/index.js
   → 页面/扩展检测到链接
   → POST /api/resolve-tg-link
   → gramjs 获取消息及媒体
-     ├── 视频 → 注册 docMap，创建 pending card
+     ├── 视频 → 注册 docMap，创建 pending card（附 fileMeta）
      ├── 图片 → 下载缩略图
      └── 磁力 → 提取磁力链接
   → 用户点击「离线」
      ├── 私密频道 → 打开 t.me 链接
      └── 普通频道 → 转发 InputMediaDocument 到 @PikPak_Bot
+         ├── 优先使用卡片自带的 fileMeta（无 docMap 依赖）
+         ├── 降级到 docMap（旧卡片）
+         └── 文件引用过期 → 自动重新解析 TS 链接并重试
 ```
 
 ### API
@@ -253,8 +256,17 @@ node telegram-bot/index.js
 | 端点 | 方法 | 说明 |
 |------|------|------|
 | `/api/resolve-tg-link` | POST | 解析 t.me 链接，返回媒体信息和 pending 状态 |
+| `/api/resolve-tg-file` | POST | 轻量解析 t.me 链接，仅返回文件元数据（不下图、不入队列） |
+| `/api/forward-to-pikpak/:fileId` | POST | 转发文件到 @PikPak_Bot（支持卡片自带的 fileMeta 或 docMap 降级） |
 | `/api/pending` | GET | 获取所有 pending 卡片 |
 | `/api/pending/:id` | DELETE | 删除指定 pending 卡片 |
+| `/api/add` | POST | 手动添加条目（供扩展调用） |
+| `/api/doc-map` | GET | 获取全量 docMap（旧卡片迁移用） |
+| `/api/doc-map-entry/:docId` | GET | 获取单个 docMap 条目 |
+| `/api/telethon/status` | GET | 检查用户 session 登录状态 |
+| `/api/telethon/send-code` | POST | 发送 Telegram 登录验证码 |
+| `/api/telethon/sign-in` | POST | 验证码登录 |
+| `/api/telethon/check-2fa` | POST | 检查是否需要两步验证密码 |
 
 ---
 
@@ -350,6 +362,10 @@ node telegram-bot/index.js
 | **标题过滤词** | 管理自动清理标题中的广告词 |
 | **429 失败管理** | 预览失败的磁力可稍后重试、批量导入 |
 | **失败列表** | 图片转换失败的磁力列表，支持重试 |
+| **Telegram 元数据刷新** | 单卡/批量刷新 Telegram 视频文件元数据（fileMeta 自持，不依赖 Bot docMap） |
+| **旧卡片迁移** | 一键将 docMap 中的文件元数据迁移到卡片本地（fileMeta），实现完全自持 |
+| **批量添加自动解析** | 保存磁力前自动从 whatslink.info 获取标题、截图、大小 |
+| **筛选增强** | 新增「无图片」「电报卡片」筛选选项 |
 
 ---
 
