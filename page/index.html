@@ -4613,7 +4613,28 @@ const magnetLinkEl = m.magnetLink ? `<a href="${escapeHtml(m.magnetLink)}" class
             msg += `\n\n未匹配到 docMap 的卡片（共 ${skippedTitles.length} 张）：\n${skippedTitles.join('\n')}`;
             msg += '\n\n可搜索标题找到对应卡片，点「🔄 更新」按钮手动刷新';
         }
-        alert(msg);
+        // 用可复制弹窗替代 alert
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;';
+        const box = document.createElement('div');
+        box.style.cssText = 'background:var(--card-bg,#fff);color:var(--text-primary,#000);border-radius:16px;padding:20px;max-width:500px;width:90%;max-height:80vh;display:flex;flex-direction:column;gap:12px;box-shadow:0 8px 32px rgba(0,0,0,0.3);';
+        const title = document.createElement('div');
+        title.style.cssText = 'font-weight:bold;font-size:1rem;';
+        title.textContent = '📤 迁移结果';
+        const textarea = document.createElement('textarea');
+        textarea.readOnly = true;
+        textarea.value = msg;
+        textarea.style.cssText = 'width:100%;min-height:120px;flex:1;padding:10px;border-radius:12px;border:1px solid var(--border-color,#ddd);background:var(--input-bg,#f5f5f5);color:var(--text-primary,#000);font-family:monospace;font-size:0.85rem;resize:vertical;';
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = '关闭';
+        closeBtn.style.cssText = 'padding:8px 20px;border-radius:12px;border:none;background:#10b981;color:#fff;cursor:pointer;font-weight:bold;align-self:flex-end;';
+        closeBtn.onclick = () => overlay.remove();
+        overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+        box.appendChild(title);
+        box.appendChild(textarea);
+        box.appendChild(closeBtn);
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
     }
 
     async function batchRefreshMeta() {
