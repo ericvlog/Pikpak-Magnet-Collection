@@ -4460,7 +4460,7 @@ async function renderLoadedCards() {
             const imgBadge = isLocal ? '本地' : (m.imageUrl ? '网络' : '');
             const badges = [];
             if (m.shareUrl) badges.push('📂 共享目录');
-            if (m.magnetLink) badges.push('🧲 磁力');
+            else if (m.magnetLink) badges.push('🧲 磁力');
             if (hasTg) badges.push(`${m.restricted ? '🔒 ' : ''}📱 TG视频${videoCount > 1 ? '×' + videoCount : ''}`);
             else if (m.videoUrl) badges.push(`${m.restricted ? '🔒 ' : ''}🎬 视频${videoCount > 1 ? '×' + videoCount : ''}`);
             if (imgBadge) badges.push(imgBadge);
