@@ -867,7 +867,7 @@
 <button id="clipboardWatchToggleBtn" class="btn btn-success">🟢 监视剪贴板</button>
 <span id="tgProgressStatus" style="font-size:0.75rem;color:var(--text-secondary);margin-left:8px;"></span>
         </div></div></div>
-        <div class="drag-area" id="tagsDragArea"><div class="drag-header" data-target="tagsContent"><div class="drag-title"><i class="fas fa-hashtag"></i> 🏷️ 拖拽标签可排序（点击筛选）</div><i class="fas fa-chevron-down toggle-icon"></i></div><div class="drag-content" id="tagsContent"><div id="draggableTagsList" class="tags-container"></div></div></div>
+        <div class="drag-area" id="tagsDragArea"><div class="drag-header" data-target="tagsContent"><div class="drag-title"><i class="fas fa-hashtag"></i> 🏷️ 拖拽标签可排序（点击筛选）<span id="sortTagsAlphaBtn" style="margin-left:8px;cursor:pointer;font-size:0.75rem;opacity:0.7;">🔤 拼音排序</span></div><i class="fas fa-chevron-down toggle-icon"></i></div><div class="drag-content" id="tagsContent"><div id="draggableTagsList" class="tags-container"></div></div></div>
         <div class="filter-bar">
             <input type="text" id="searchInput" placeholder="🔍 搜索标题或标签" style="width:200px">
             <div class="rating-filter"><span>评分筛选：</span><div class="star-filter" id="ratingFilter"><i data-rating="1" class="far fa-star"></i><i data-rating="2" class="far fa-star"></i><i data-rating="3" class="far fa-star"></i><i data-rating="4" class="far fa-star"></i><i data-rating="5" class="far fa-star"></i></div><button id="clearRatingFilter" class="btn-outline btn" style="padding:4px 12px;">清除</button></div>
@@ -973,6 +973,18 @@
     function saveTagOrder() { localStorage.setItem('tagOrder', JSON.stringify(tagOrder)); }
     function sortTagsByOrder() { if (!tagOrder || tagOrder.length === 0) return; const orderMap = new Map(); tagOrder.forEach((id, idx) => orderMap.set(id, idx)); tags.sort((a, b) => (orderMap.get(a.id) ?? Infinity) - (orderMap.get(b.id) ?? Infinity)); }
     function updateTagOrderFromTags() { tagOrder = tags.map(t => t.id); saveTagOrder(); }
+
+    function sortTagsAlphabetically() {
+        const collator = new Intl.Collator('zh-CN', { numeric: true });
+        tags.sort((a, b) => collator.compare(a.name, b.name));
+        tagOrder = tags.map(t => t.id);
+        saveTagOrder();
+        saveToDB().then(() => {
+            renderDraggable();
+            initTagDragSort();
+            showToast('✅ 标签已按拼音排序');
+        }).catch(() => showToast('❌ 排序保存失败', true));
+    }
 
     // ===== IndexedDB 操作 =====
     function openDB() { return new Promise((resolve, reject) => { const request = indexedDB.open(DB_NAME, DB_VERSION); request.onerror = () => reject(request.error); request.onsuccess = () => { db = request.result; resolve(db); }; request.onupgradeneeded = (event) => { const db = event.target.result; if (!db.objectStoreNames.contains(STORES.tags)) db.createObjectStore(STORES.tags, { keyPath: 'id' }); if (!db.objectStoreNames.contains(STORES.magnets)) db.createObjectStore(STORES.magnets, { keyPath: 'id' }); if (!db.objectStoreNames.contains(STORES.autoTagRules)) db.createObjectStore(STORES.autoTagRules, { keyPath: 'id', autoIncrement: true }); if (!db.objectStoreNames.contains(STORES.filterWords)) db.createObjectStore(STORES.filterWords, { keyPath: 'id', autoIncrement: true }); if (!db.objectStoreNames.contains(STORES.images)) db.createObjectStore(STORES.images, { keyPath: 'id' }); if (!db.objectStoreNames.contains(STORES.failList)) db.createObjectStore(STORES.failList, { keyPath: 'cardId' }); }; }); }
@@ -4850,6 +4862,7 @@ const magnetLinkEl = m.magnetLink ? `<a href="${escapeHtml(m.magnetLink)}" class
         document.getElementById('cancelBatchTagsBtn').onclick = () => document.getElementById('batchTagModal').style.display = 'none';
         document.getElementById('confirmBatchTagsBtn').onclick = confirmBatchAddTags;
         document.getElementById('addTagBtn').onclick = async () => { let name = document.getElementById('newTagName').value.trim(); if(name) { const newId = nextTagId++; tags.push({ id: newId, name }); tagOrder.push(newId); saveTagOrder(); await saveToDB(); updateFilteredList(); currentLoadedCount = 0; renderLoadedCards(); updateStats(allFilteredMagnets.length, magnets.length); document.getElementById('newTagName').value = ''; refreshRuleTagSelect(); renderRulesList(); renderDraggable(); renderTagManagementList(); } };
+        document.getElementById('sortTagsAlphaBtn').onclick = (e) => { e.stopPropagation(); sortTagsAlphabetically(); };
         document.getElementById('addRuleBtn').onclick = addRule;
         document.getElementById('resetFilterBtn').onclick = () => {
             document.getElementById('searchInput').value = '';
