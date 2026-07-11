@@ -5207,7 +5207,8 @@ document.getElementById('pagePikpakLoginBtn').onclick = () => { ppUpdateLoginUI(
                         setTimeout(() => { window.removeEventListener('message', handler); reject(new Error('扩展未响应')); }, 120000);
                     });
                     let msg = result.map(r => `${r.label}: ${r.ok ? '✅' : '❌'} ${r.status} ${r.time}ms`).join('\n');
-                    alert('whatslink.info 连通性测试结果：\n\n' + msg + '\n\n首页200+API失败=源站问题');
+                    const allOk = result.every(r => r.ok);
+                    alert('连通性测试结果：\n\n' + msg + '\n\n' + (allOk ? '✅ 所有服务正常' : '⚠️ 部分服务不可用，可能影响预览功能'));
                 } catch (e) {
                     alert('测试失败：' + e.message);
                 }
