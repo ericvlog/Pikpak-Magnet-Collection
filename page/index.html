@@ -2398,15 +2398,20 @@ function bindMagnetLinkEvents() {
         if (types.has('tg')) {
             const allFileIds = [];
             const allFileMeta = {};
+            const allImages = [];
             for (const c of cards) {
                 if (c.fileIds) allFileIds.push(...c.fileIds);
                 else if (c.fileId) allFileIds.push(c.fileId);
                 if (c.fileMeta) Object.assign(allFileMeta, c.fileMeta);
+                if (c.imageUrl) allImages.push(c.imageUrl);
+                if (c.extraImages) allImages.push(...c.extraImages);
             }
             first.fileIds = allFileIds;
             first.fileId = allFileIds[0] || first.fileId;
             first.fileMeta = allFileMeta;
             first.videoUrl = first.videoUrl || '';
+            first.imageUrl = allImages[0] || first.imageUrl;
+            first.extraImages = allImages.slice(1);
             if (cards.length > 1) first.title = first.title.replace(/\s*\+\s*\d+\s*个.*$/, '') + ` + ${allFileIds.length} 个视频`;
         } else if (types.has('magnet')) {
             const allLinks = [];
