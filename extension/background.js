@@ -1641,19 +1641,27 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 const m = shareUrl.match(/https?:\/\/mypikpak\.com\/s\/([a-zA-Z0-9_-]+)/);
                 if (!m) throw new Error('无法解析分享链接');
                 const shareId = m[1];
+                console.log('[扩展] 获取共享信息:', { shareUrl, shareId });
                 // 获取 share info 和 pass_code_token
-                const infoResp = await ppApiFetchBg(`https://api-drive.mypikpak.com/drive/v1/share?share_id=${shareId}&thumbnail_size=SIZE_LARGE&limit=200`);
-                const infoData = await infoResp.json();
+                const infoResp = await ppApiFetchBg(`https://api-drive.mypikpak.com/drive/v1/share?share_id=${encodeURIComponent(shareId)}&thumbnail_size=SIZE_LARGE&limit=200`);
+                const infoText = await infoResp.text();
+                console.log('[扩展] share info 响应:', infoResp.status, infoText.slice(0, 500));
+                let infoData;
+                try { infoData = JSON.parse(infoText); } catch(e) { throw new Error('解析 share info 失败: ' + infoText.slice(0, 200)); }
                 if (!infoResp.ok) throw new Error(infoData.error_description || `HTTP ${infoResp.status}`);
                 const passCodeToken = infoData.pass_code_token;
                 if (!passCodeToken) throw new Error('无法获取 pass_code_token');
                 // 获取文件列表
-                const detailResp = await ppApiFetchBg(`https://api-drive.mypikpak.com/drive/v1/share/detail?share_id=${shareId}&pass_code_token=${passCodeToken}&thumbnail_size=SIZE_LARGE&limit=200&with_audit=true`);
-                const detailData = await detailResp.json();
+                const detailResp = await ppApiFetchBg(`https://api-drive.mypikpak.com/drive/v1/share/detail?share_id=${encodeURIComponent(shareId)}&pass_code_token=${encodeURIComponent(passCodeToken)}&thumbnail_size=SIZE_LARGE&limit=200&with_audit=true`);
+                const detailText = await detailResp.text();
+                console.log('[扩展] share detail 响应:', detailResp.status, detailText.slice(0, 500));
+                let detailData;
+                try { detailData = JSON.parse(detailText); } catch(e) { throw new Error('解析 share detail 失败: ' + detailText.slice(0, 200)); }
                 if (!detailResp.ok) throw new Error(detailData.error_description || `HTTP ${detailResp.status}`);
                 const files = detailData.files || [];
                 sendResponse({ success: true, shareId, passCodeToken, files });
             } catch (err) {
+                console.error('[扩展] 获取共享信息失败:', err.message);
                 sendResponse({ success: false, error: err.message });
             }
         })();
@@ -1664,14 +1672,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             try {
                 const { shareId, passCodeToken, fileIds, parentId } = request;
                 if (!shareId || !passCodeToken || !fileIds || fileIds.length === 0) throw new Error('参数不完整');
+                console.log('[扩展] 转存共享文件:', { shareId, passCodeToken: passCodeToken.slice(0, 10) + '...', fileIds: fileIds.length + '个', parentId });
                 const body = { share_id: shareId, pass_code_token: passCodeToken, file_ids: fileIds, to: { parent_id: parentId || '' } };
                 const resp = await ppApiFetchBg('https://api-drive.mypikpak.com/drive/v1/share/restore', {
                     method: 'POST', body: JSON.stringify(body)
                 });
-                const data = await resp.json();
-                if (!resp.ok) throw new Error(data.error_description || `HTTP ${resp.status}`);
+                const text = await resp.text();
+                console.log('[扩展] 转存响应:', resp.status, text.slice(0, 500));
+                let data;
+                try { data = JSON.parse(text); } catch(e) { data = text; }
+                if (!resp.ok) throw new Error((data.error_description || data.error || '') + ` (HTTP ${resp.status})`);
                 sendResponse({ success: true, data });
             } catch (err) {
+                console.error('[扩展] 转存失败:', err.message);
                 sendResponse({ success: false, error: err.message });
             }
         })();
