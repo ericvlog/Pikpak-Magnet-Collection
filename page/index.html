@@ -2412,7 +2412,6 @@ function bindMagnetLinkEvents() {
             first.videoUrl = first.videoUrl || '';
             first.imageUrl = allImages[0] || first.imageUrl;
             first.extraImages = allImages.slice(1);
-            if (cards.length > 1) first.title = first.title.replace(/\s*\+\s*\d+\s*个.*$/, '') + ` + ${allFileIds.length} 个视频`;
         } else if (types.has('magnet')) {
             const allLinks = [];
             for (const c of cards) {
@@ -2421,7 +2420,6 @@ function bindMagnetLinkEvents() {
             }
             first.magnetLinks = allLinks;
             first.magnetLink = allLinks[0];
-            if (cards.length > 1) first.title = first.title.replace(/\s*\+\s*\d+\s*个.*$/, '') + ` + ${allLinks.length} 个磁力`;
         }
         magnets = magnets.filter(m => !idsToRemove.includes(m.id) || m.id === first.id);
         selectedCardIds.clear();
