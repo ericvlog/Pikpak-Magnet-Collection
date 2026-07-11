@@ -887,7 +887,7 @@
     </div>
 </div>
 <button id="floatHideImageBtn" class="float-hide-btn" title="隐藏/显示图片"><i class="fas fa-image"></i><i class="fas fa-eye-slash"></i><span>隐藏<br>图片</span></button>
-<div class="floating-controls"><div id="floatingBatchBar" class="batch-bar"><span id="selectedCount">已选择 0 个卡片</span><div class="batch-actions"><button id="batchAddTagsBtn" class="btn btn-primary">🏷️ 批量添加标签</button><button id="batchCopyLinksBtn" class="btn btn-success">🔗 批量复制链接</button><button id="batchSaveImagesBtn" class="btn btn-primary" style="background:#0f3b3f;">💾 批量存本地</button><button id="batchDeleteBtn" class="btn btn-danger">🗑️ 批量删除</button><button id="batchReFetchBtn" class="btn btn-warning" style="background:#8b5e3c;color:#fff;">🔄 重新获取</button><button id="selectAllCurrentBtn" class="btn btn-outline">✔️ 全选当前视图</button><button id="selectAllFilteredBtn" class="btn btn-outline">⭐ 全选全部筛选结果</button><button id="batchOfflineBtn" class="btn btn-primary" style="background:#0f3b3f;">📥 批量离线</button><button id="batchRefreshMetaBtn" class="btn btn-warning" style="background:#8b5e3c;color:#fff;">🔄 更新元数据</button><button id="cancelSelectionBtn" class="btn btn-outline">❌ 取消选择</button></div></div></div>
+<div class="floating-controls"><div id="floatingBatchBar" class="batch-bar"><span id="selectedCount">已选择 0 个卡片</span><div class="batch-actions"><button id="batchAddTagsBtn" class="btn btn-primary">🏷️ 批量添加标签</button><button id="batchCopyLinksBtn" class="btn btn-success">🔗 批量复制链接</button><button id="batchSaveImagesBtn" class="btn btn-primary" style="background:#0f3b3f;">💾 批量存本地</button><button id="batchDeleteBtn" class="btn btn-danger">🗑️ 批量删除</button><button id="batchReFetchBtn" class="btn btn-warning" style="background:#8b5e3c;color:#fff;">🔄 重新获取</button><button id="selectAllCurrentBtn" class="btn btn-outline">✔️ 全选当前视图</button><button id="selectAllFilteredBtn" class="btn btn-outline">⭐ 全选全部筛选结果</button><button id="batchOfflineBtn" class="btn btn-primary" style="background:#0f3b3f;">📥 批量离线</button><button id="batchRefreshMetaBtn" class="btn btn-warning" style="background:#8b5e3c;color:#fff;">🔄 更新元数据</button><button id="batchMergeBtn" class="btn btn-primary" style="background:#7c3aed;">🔗 合并</button><button id="cancelSelectionBtn" class="btn btn-outline">❌ 取消选择</button></div></div></div>
 
 <!-- ===== 所有模态框 ===== -->
 <div id="batchCopyModal" class="modal"><div class="modal-card"><div class="flex-between"><h3>📋 批量磁力链接</h3><button id="closeBatchCopyModalBtn" class="icon-btn">✖</button></div><div style="padding:1rem;"><div id="batchLinksContainer" class="batch-links-container"></div><div style="display:flex;justify-content:flex-end;gap:12px;margin-top:1rem;"><button id="copyAllBatchLinksBtn" class="btn btn-primary">📋 复制全部</button><button id="cancelBatchCopyBtn" class="btn btn-outline">关闭</button></div></div></div></div>
@@ -1396,6 +1396,20 @@
         } else if (fIds.length === 1) {
             await offlineSingleFile(fIds[0], parentId, card.messageUrl, card.fileMeta);
             showToast('✅ 已发送到 PikPak，任务创建成功！');
+        }
+        // 合并磁力卡：逐个发送所有磁力链接
+        const mLinks = card.magnetLinks || (card.magnetLink ? [card.magnetLink] : []);
+        if (mLinks.length > 1 || (mLinks.length === 1 && fIds.length === 0)) {
+            let ok = 0, fail = 0;
+            for (const link of mLinks) {
+                try {
+                    await sendToPikPakViaBridge(link, parentId);
+                    ok++;
+                } catch (e) { fail++; }
+                await new Promise(r => setTimeout(r, 500));
+            }
+            if (fail === 0) showToast(`✅ 已发送 ${ok} 个磁力到 PikPak`);
+            else showToast(`✅ ${ok} 个成功, ${fail} 个失败`, fail > 0);
         }
     }
 
@@ -2366,11 +2380,55 @@ function bindMagnetLinkEvents() {
 
     // ===== 多选 & 界面控制 =====
     function toggleSelectionMode(){ selectionMode=!selectionMode; const container=document.getElementById('magnetGridContainer'); const bar=document.getElementById('floatingBatchBar'); if(selectionMode){ container.classList.add('selection-mode'); if(selectedCardIds.size>0) bar.style.display='flex'; else bar.style.display='none'; lastSelectedCardId=null; }else{ container.classList.remove('selection-mode'); bar.style.display='none'; selectedCardIds.clear(); } renderLoadedCards(); }
-    function updateSelectedCount(){ const span=document.getElementById('selectedCount'); if(span) span.innerText=`已选择 ${selectedCardIds.size} 个卡片`; const btns=document.querySelectorAll('#batchAddTagsBtn, #batchCopyLinksBtn, #batchDeleteBtn, #batchSaveImagesBtn, #batchOfflineBtn, #batchReFetchBtn, #batchRefreshMetaBtn'); btns.forEach(btn=>btn.disabled=(selectedCardIds.size===0)); const bar=document.getElementById('floatingBatchBar'); if(selectionMode){ if(selectedCardIds.size>0) bar.style.display='flex'; else bar.style.display='none'; } }
+    function updateSelectedCount(){ const span=document.getElementById('selectedCount'); if(span) span.innerText=`已选择 ${selectedCardIds.size} 个卡片`; const btns=document.querySelectorAll('#batchAddTagsBtn, #batchCopyLinksBtn, #batchDeleteBtn, #batchSaveImagesBtn, #batchOfflineBtn, #batchReFetchBtn, #batchRefreshMetaBtn, #batchMergeBtn'); btns.forEach(btn=>btn.disabled=(selectedCardIds.size===0)); const bar=document.getElementById('floatingBatchBar'); if(selectionMode){ if(selectedCardIds.size>0) bar.style.display='flex'; else bar.style.display='none'; } }
     function selectAllCurrent(){ const ids=allFilteredMagnets.slice(0,currentLoadedCount).map(m=>m.id); ids.forEach(id=>selectedCardIds.add(id)); renderLoadedCards(); updateSelectedCount(); showToast(`已选择当前视图中的 ${ids.length} 张卡片`); }
     function selectAllFiltered(){ allFilteredMagnets.forEach(m=>selectedCardIds.add(m.id)); renderLoadedCards(); updateSelectedCount(); showToast(`已选择所有筛选结果中的 ${allFilteredMagnets.length} 张卡片`); }
     async function batchDelete(){ if(selectedCardIds.size===0){ alert('请先选择卡片'); return; } if(confirm(`确定要永久删除选中的 ${selectedCardIds.size} 张卡片吗？`)){ const toDel=Array.from(selectedCardIds); magnets=magnets.filter(m=>!selectedCardIds.has(m.id)); selectedCardIds.clear(); await saveToDB(); updateFilteredList(); currentLoadedCount=0; renderLoadedCards(); updateStats(allFilteredMagnets.length,magnets.length); showToast(`已删除 ${toDel.length} 张卡片`); updateSelectedCount(); if(selectionMode) toggleSelectionMode(); } }
     async function batchReFetchCards(){ if(selectedCardIds.size===0){ alert('请先选择卡片'); return; } const cards=Array.from(selectedCardIds).map(id=>magnets.find(m=>m.id===id)).filter(Boolean); const withUrl=cards.filter(m=>m.messageUrl); if(withUrl.length===0){ alert('选中的卡片没有 t.me 链接，无法重新获取'); return; } if(!confirm(`确定要重新获取 ${withUrl.length} 张卡片的 Telegram 链接吗？将删除旧卡片并创建新的待处理卡片。`)) return; showToast(`正在重新获取 ${withUrl.length} 张卡片...`); let ok=0,fail=0; for(const m of withUrl){ try{ await resolveTgLinkViaBridge(m.messageUrl); ok++; }catch(e){ fail++; console.warn('重新获取失败:', m.messageUrl, e.message); } } magnets=magnets.filter(m=>!selectedCardIds.has(m.id)); selectedCardIds.clear(); await saveToDB(); updateFilteredList(); currentLoadedCount=0; renderLoadedCards(); updateStats(allFilteredMagnets.length,magnets.length); updateSelectedCount(); if(selectionMode) toggleSelectionMode(); setTimeout(()=>{ if(typeof importFromExtension==='function') importFromExtension(); },800); showToast(`✅ 已重新获取 ${ok} 张卡片${fail>0?`, ${fail} 张失败`:''}`); }
+    async function batchMergeCards(){
+        if (selectedCardIds.size < 2) { showToast('请至少选择 2 张卡片合并', true); return; }
+        const cards = Array.from(selectedCardIds).map(id => magnets.find(m => m.id === id)).filter(Boolean);
+        const types = new Set();
+        cards.forEach(c => { if (c.fileId || (c.fileIds && c.fileIds.length)) types.add('tg'); else if (c.magnetLink) types.add('magnet'); else types.add('other'); });
+        if (types.size > 1) { showToast('只能合并同类卡片（全部为 TG 视频或全部为磁力）', true); return; }
+        if (types.has('other')) { showToast('不支持的卡片类型', true); return; }
+        const idsToRemove = Array.from(selectedCardIds);
+        const first = cards[0];
+        const rest = cards.slice(1);
+        if (types.has('tg')) {
+            const allFileIds = [];
+            const allFileMeta = {};
+            for (const c of cards) {
+                if (c.fileIds) allFileIds.push(...c.fileIds);
+                else if (c.fileId) allFileIds.push(c.fileId);
+                if (c.fileMeta) Object.assign(allFileMeta, c.fileMeta);
+            }
+            first.fileIds = allFileIds;
+            first.fileId = allFileIds[0] || first.fileId;
+            first.fileMeta = allFileMeta;
+            first.videoUrl = first.videoUrl || '';
+            if (cards.length > 1) first.title = first.title.replace(/\s*\+\s*\d+\s*个.*$/, '') + ` + ${allFileIds.length} 个视频`;
+        } else if (types.has('magnet')) {
+            const allLinks = [];
+            for (const c of cards) {
+                if (c.magnetLinks && c.magnetLinks.length) allLinks.push(...c.magnetLinks);
+                else if (c.magnetLink) allLinks.push(c.magnetLink);
+            }
+            first.magnetLinks = allLinks;
+            first.magnetLink = allLinks[0];
+            if (cards.length > 1) first.title = first.title.replace(/\s*\+\s*\d+\s*个.*$/, '') + ` + ${allLinks.length} 个磁力`;
+        }
+        magnets = magnets.filter(m => !idsToRemove.includes(m.id) || m.id === first.id);
+        selectedCardIds.clear();
+        await saveToDB();
+        updateFilteredList();
+        currentLoadedCount = 0;
+        await renderLoadedCards();
+        updateStats(allFilteredMagnets.length, magnets.length);
+        updateSelectedCount();
+        if (selectionMode) toggleSelectionMode();
+        showToast(`✅ 已合并 ${cards.length} 张卡片`);
+    }
     function openBatchAddTags(){ if(selectedCardIds.size===0){ alert('请先选择卡片'); return; } const container=document.getElementById('batchTagSelectorContainer'); container.innerHTML=''; tags.forEach(tag=>{ const span=document.createElement('span'); span.className='tag-option'; span.textContent=`# ${tag.name}`; span.dataset.id=tag.id; span.onclick=()=>{ span.classList.toggle('selected'); }; container.appendChild(span); }); document.getElementById('batchTagModal').style.display='flex'; }
     async function confirmBatchAddTags(){ const selected=Array.from(document.querySelectorAll('#batchTagSelectorContainer .tag-option.selected')).map(span=>parseInt(span.dataset.id)); if(selected.length===0){ alert('请至少选择一个标签'); return; } for(const id of selectedCardIds){ const m=magnets.find(m=>m.id===id); if(m){ for(const tid of selected){ if(!m.tagIds.includes(tid)) m.tagIds.push(tid); } } } await saveToDB(); updateFilteredList(); currentLoadedCount=0; renderLoadedCards(); updateStats(allFilteredMagnets.length,magnets.length); showToast(`已为 ${selectedCardIds.size} 个卡片添加所选标签`); document.getElementById('batchTagModal').style.display='none'; updateSelectedCount(); }
     function cancelSelection(){ if(selectionMode) toggleSelectionMode(); }
@@ -4460,7 +4518,10 @@ async function renderLoadedCards() {
             const imgBadge = isLocal ? '本地' : (m.imageUrl ? '网络' : '');
             const badges = [];
             if (m.shareUrl) badges.push('📂 共享目录');
-            else if (m.magnetLink) badges.push('🧲 磁力');
+            else if (m.magnetLink) {
+                const mCount = m.magnetLinks ? m.magnetLinks.length : 1;
+                badges.push(`🧲 磁力${mCount > 1 ? '×' + mCount : ''}`);
+            }
             if (hasTg) badges.push(`${m.restricted ? '🔒 ' : ''}📱 TG视频${videoCount > 1 ? '×' + videoCount : ''}`);
             else if (m.videoUrl) badges.push(`${m.restricted ? '🔒 ' : ''}🎬 视频${videoCount > 1 ? '×' + videoCount : ''}`);
             if (imgBadge) badges.push(imgBadge);
@@ -4897,6 +4958,7 @@ const magnetLinkEl = m.magnetLink ? `<a href="${escapeHtml(m.magnetLink)}" class
         document.getElementById('batchReFetchBtn').onclick = batchReFetchCards;
         document.getElementById('batchOfflineBtn').onclick = batchOfflineToPikPak;
         document.getElementById('batchRefreshMetaBtn').onclick = batchRefreshMeta;
+        document.getElementById('batchMergeBtn').onclick = batchMergeCards;
 
         // 批量离线文件夹选择
         document.getElementById('offlineFolderSelector').addEventListener('click', async () => {
