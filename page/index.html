@@ -3420,7 +3420,7 @@ function loginGDrive() {
             const btn = document.getElementById('startShareSaveBtn');
             btn.disabled = true;
             btn.textContent = '转存中...';
-            const fileIds = shareCurrentFiles.filter(f => f.kind !== 'drive#folder').map(f => f.id);
+            const fileIds = shareCurrentFiles.map(f => f.id);
             if (fileIds.length === 0) { showToast('当前目录没有可保存的文件', true); btn.disabled = false; btn.textContent = '📥 开始转存'; return; }
             modal.style.display = 'none';
             try {
