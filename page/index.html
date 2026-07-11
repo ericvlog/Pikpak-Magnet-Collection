@@ -5208,7 +5208,7 @@ document.getElementById('pagePikpakLoginBtn').onclick = () => { ppUpdateLoginUI(
                     });
                     let msg = result.map(r => `${r.label}: ${r.ok ? '✅' : '❌'} ${r.status} ${r.time}ms`).join('\n');
                     const allOk = result.every(r => r.ok);
-                    alert('连通性测试结果：\n\n' + msg + '\n\n' + (allOk ? '✅ 所有服务正常' : '⚠️ 部分服务不可用，可能影响预览功能'));
+                    alert('📡 预览连通性 (whatslink.info) 测试结果：\n\n' + msg + '\n\n' + (allOk ? '✅ 所有服务正常' : '⚠️ 部分服务不可用，可能影响预览功能'));
                 } catch (e) {
                     alert('测试失败：' + e.message);
                 }
