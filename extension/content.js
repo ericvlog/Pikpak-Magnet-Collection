@@ -395,6 +395,20 @@ window.addEventListener('message', (event) => {
         });
     }
 
+    // ===== PikPak 共享目录转存 =====
+    if (event.data.type === 'REQUEST_PIKPAK_SHARE_INFO') {
+        const shareUrl = event.data.shareUrl;
+        sendMessageToBackground({ action: 'getPikpakShareInfo', shareUrl }, (response) => {
+            window.postMessage({ type: 'PIKPAK_SHARE_INFO_RESULT', success: response?.success || false, shareId: response?.shareId, passCodeToken: response?.passCodeToken, files: response?.files || [], error: response?.error || '' }, '*');
+        });
+    }
+    if (event.data.type === 'REQUEST_SAVE_PIKPAK_SHARE_FILES') {
+        const { shareId, passCodeToken, fileIds, parentId } = event.data;
+        sendMessageToBackground({ action: 'savePikpakShareFiles', shareId, passCodeToken, fileIds, parentId }, (response) => {
+            window.postMessage({ type: 'SAVE_PIKPAK_SHARE_FILES_RESULT', success: response?.success || false, data: response?.data, error: response?.error || '' }, '*');
+        });
+    }
+
     // --- 触发 Bot 队列检查（由页面 autoImport 驱动） ---
     if (event.data.type === 'REQUEST_BOT_POLL') {
         pollBotPendingItems().then(() => {

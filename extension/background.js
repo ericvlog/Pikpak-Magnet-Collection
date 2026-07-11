@@ -1632,6 +1632,53 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return true;
     }
 
+    // ===== PikPak 共享目录转存 =====
+    if (request.action === 'getPikpakShareInfo') {
+        (async () => {
+            try {
+                const shareUrl = request.shareUrl;
+                if (!shareUrl) throw new Error('缺少 shareUrl');
+                const m = shareUrl.match(/https?:\/\/mypikpak\.com\/s\/([a-zA-Z0-9_-]+)/);
+                if (!m) throw new Error('无法解析分享链接');
+                const shareId = m[1];
+                // 获取 share info 和 pass_code_token
+                const infoResp = await ppApiFetchBg(`https://api-drive.mypikpak.com/drive/v1/share?share_id=${shareId}&thumbnail_size=SIZE_LARGE&limit=200`);
+                const infoData = await infoResp.json();
+                if (!infoResp.ok) throw new Error(infoData.error_description || `HTTP ${infoResp.status}`);
+                const passCodeToken = infoData.pass_code_token;
+                if (!passCodeToken) throw new Error('无法获取 pass_code_token');
+                // 获取文件列表
+                const detailResp = await ppApiFetchBg(`https://api-drive.mypikpak.com/drive/v1/share/detail?share_id=${shareId}&pass_code_token=${passCodeToken}&thumbnail_size=SIZE_LARGE&limit=200&with_audit=true`);
+                const detailData = await detailResp.json();
+                if (!detailResp.ok) throw new Error(detailData.error_description || `HTTP ${detailResp.status}`);
+                const files = detailData.files || [];
+                sendResponse({ success: true, shareId, passCodeToken, files });
+            } catch (err) {
+                sendResponse({ success: false, error: err.message });
+            }
+        })();
+        return true;
+    }
+    if (request.action === 'savePikpakShareFiles') {
+        (async () => {
+            try {
+                const { shareId, passCodeToken, fileIds, parentId } = request;
+                if (!shareId || !passCodeToken || !fileIds || fileIds.length === 0) throw new Error('参数不完整');
+                const body = { share_id: shareId, pass_code_token: passCodeToken, file_ids: fileIds };
+                if (parentId) body.parent_id = parentId;
+                const resp = await ppApiFetchBg('https://api-drive.mypikpak.com/drive/v1/files:batchCreate', {
+                    method: 'POST', body: JSON.stringify(body)
+                });
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.error_description || `HTTP ${resp.status}`);
+                sendResponse({ success: true, data });
+            } catch (err) {
+                sendResponse({ success: false, error: err.message });
+            }
+        })();
+        return true;
+    }
+
     console.warn('[后台] 未知操作:', request.action);
     sendResponse({ success: false, error: '未知操作' });
     return false;
