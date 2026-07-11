@@ -1664,9 +1664,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             try {
                 const { shareId, passCodeToken, fileIds, parentId } = request;
                 if (!shareId || !passCodeToken || !fileIds || fileIds.length === 0) throw new Error('参数不完整');
-                const body = { share_id: shareId, pass_code_token: passCodeToken, file_ids: fileIds };
-                if (parentId) body.parent_id = parentId;
-                const resp = await ppApiFetchBg('https://api-drive.mypikpak.com/drive/v1/files:batchCreate', {
+                const body = { share_id: shareId, pass_code_token: passCodeToken, file_ids: fileIds, to: { parent_id: parentId || '' } };
+                const resp = await ppApiFetchBg('https://api-drive.mypikpak.com/drive/v1/share/restore', {
                     method: 'POST', body: JSON.stringify(body)
                 });
                 const data = await resp.json();
