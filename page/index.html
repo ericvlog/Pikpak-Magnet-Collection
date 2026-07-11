@@ -3551,6 +3551,9 @@ function loginGDrive() {
     let clipboardMagnetLastFocusTime = 0;
     let clipboardTgQueue = [];
     let clipboardTgProcessing = false;
+    let clipboardJsonQueue = [];
+    let clipboardJsonProcessing = false;
+    const CLIPBOARD_JSON_QUEUE_KEY = 'clipboard_json_queue';
     const CLIPBOARD_FOCUS_COOLDOWN = 2500;
 
     function saveClipboardQueue() {
@@ -3560,6 +3563,15 @@ function loginGDrive() {
         try {
             const saved = JSON.parse(localStorage.getItem(CLIPBOARD_QUEUE_KEY) || '[]');
             if (Array.isArray(saved)) clipboardMagnetQueue = saved;
+        } catch(e) {}
+    }
+    function saveClipboardJsonQueue() {
+        localStorage.setItem(CLIPBOARD_JSON_QUEUE_KEY, JSON.stringify(clipboardJsonQueue));
+    }
+    function loadClipboardJsonQueue() {
+        try {
+            const saved = JSON.parse(localStorage.getItem(CLIPBOARD_JSON_QUEUE_KEY) || '[]');
+            if (Array.isArray(saved)) clipboardJsonQueue = saved;
         } catch(e) {}
     }
 
@@ -3645,6 +3657,41 @@ function loginGDrive() {
                 }
                 showToast(`📋 检测到 ${newMagnets.length} 个磁力链接`);
                 processMagnetQueue();
+            }
+            // 检测 JSON 格式（仅当未检测到磁力链接时，避免干扰）
+            if (newMagnets.length === 0) {
+                try {
+                    let parsed;
+                    try { parsed = JSON.parse(text); } catch(e) {
+                        const fixed = autoFixJsonArray(text);
+                        parsed = JSON.parse(fixed);
+                    }
+                    let items = Array.isArray(parsed) ? parsed : [parsed];
+                    const validItems = items.filter(item => (item.title || item.name) && (item.magnetLink || item.magnet));
+                    if (validItems.length > 0) {
+                        const newJsonItems = validItems.filter(item => {
+                            const magnetLink = (item.magnetLink || item.magnet || '').toLowerCase();
+                            return !clipboardJsonQueue.some(q => q.magnetLink.toLowerCase() === magnetLink) &&
+                                   !magnets.some(m => m.magnetLink && m.magnetLink.toLowerCase() === magnetLink);
+                        });
+                        if (newJsonItems.length > 0) {
+                            clipboardMagnetLastFocusTime = Date.now();
+                            for (const item of newJsonItems) {
+                                clipboardJsonQueue.push({
+                                    title: item.title || item.name || '',
+                                    magnetLink: item.magnetLink || item.magnet || '',
+                                    size: item.size || '',
+                                    imageUrl: item.imageUrl || item.image || ''
+                                });
+                            }
+                            saveClipboardJsonQueue();
+                            showToast(`📋 检测到 ${newJsonItems.length} 个来自 JSON 的磁力`);
+                            processJsonQueue();
+                        }
+                    }
+                } catch(e) {
+                    // 不是 JSON，忽略
+                }
             }
             // 检测 t.me 链接
             const tgLinks = extractTelegramLinks(text);
@@ -3767,6 +3814,31 @@ function loginGDrive() {
         }
     }
 
+    async function processJsonQueue() {
+        if (clipboardJsonProcessing || clipboardJsonQueue.length === 0) return;
+        clipboardJsonProcessing = true;
+        while (clipboardJsonQueue.length > 0) {
+            const item = clipboardJsonQueue[0];
+            try {
+                await new Promise((resolve) => {
+                    const fakeData = {
+                        name: item.title,
+                        size: item.size || '',
+                        screenshots: item.imageUrl ? [{ src: item.imageUrl }] : []
+                    };
+                    showPreviewPopup(item.magnetLink, item.title, fakeData, null, resolve);
+                });
+                clipboardJsonQueue.shift();
+                saveClipboardJsonQueue();
+            } catch (err) {
+                clipboardJsonQueue.shift();
+                saveClipboardJsonQueue();
+            }
+        }
+        clipboardJsonProcessing = false;
+        if (clipboardJsonQueue.length > 0) processJsonQueue();
+    }
+
     function toggleClipboardWatch() {
         const newState = !isClipboardWatchEnabled();
         localStorage.setItem(CLIPBOARD_ENABLED_KEY, newState);
@@ -3839,9 +3911,45 @@ function loginGDrive() {
                 showToast(`📨 检测到 ${newTgLinks.length} 个 Telegram 链接`);
                 processTgLinkQueue();
             }
+            // JSON 格式（仅当未检测到磁力链接时）
+            if (newMagnets.length === 0) {
+                try {
+                    let parsed;
+                    try { parsed = JSON.parse(text); } catch(e) {
+                        const fixed = autoFixJsonArray(text);
+                        parsed = JSON.parse(fixed);
+                    }
+                    let items = Array.isArray(parsed) ? parsed : [parsed];
+                    const validItems = items.filter(item => (item.title || item.name) && (item.magnetLink || item.magnet));
+                    if (validItems.length > 0) {
+                        const newJsonItems = validItems.filter(item => {
+                            const magnetLink = (item.magnetLink || item.magnet || '').toLowerCase();
+                            return !clipboardJsonQueue.some(q => q.magnetLink.toLowerCase() === magnetLink) &&
+                                   !magnets.some(m => m.magnetLink && m.magnetLink.toLowerCase() === magnetLink);
+                        });
+                        if (newJsonItems.length > 0) {
+                            for (const item of newJsonItems) {
+                                clipboardJsonQueue.push({
+                                    title: item.title || item.name || '',
+                                    magnetLink: item.magnetLink || item.magnet || '',
+                                    size: item.size || '',
+                                    imageUrl: item.imageUrl || item.image || ''
+                                });
+                            }
+                            saveClipboardJsonQueue();
+                            showToast(`📋 检测到 ${newJsonItems.length} 个来自 JSON 的磁力`);
+                            processJsonQueue();
+                        }
+                    }
+                } catch(e) {
+                    // 不是 JSON，忽略
+                }
+            }
         });
         loadClipboardTgQueue();
         if (clipboardTgQueue.length > 0) processTgLinkQueue();
+        loadClipboardJsonQueue();
+        if (clipboardJsonQueue.length > 0) processJsonQueue();
         updateClipboardWatchButton();
         console.log('[剪贴板] 监视已初始化');
         // 第一次加载延迟读取
@@ -5216,6 +5324,7 @@ document.getElementById('pagePikpakLoginBtn').onclick = () => { ppUpdateLoginUI(
                 btn.disabled = false;
             });
             loadClipboardQueue();
+            loadClipboardJsonQueue();
             initClipboardMagnetWatcher();
             console.log('初始化完成，所有按钮功能正常。');
         } catch(err){
