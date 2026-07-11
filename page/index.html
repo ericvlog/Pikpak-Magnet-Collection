@@ -2342,10 +2342,11 @@ function bindMagnetLinkEvents() {
         return list.slice(0, 5);
     }
     function formatSize(bytes) {
-        if (!bytes) return '0 B';
+        if (!bytes && bytes !== 0) return '0 B';
         const units = ['B', 'KB', 'MB', 'GB', 'TB'];
         let i = 0;
-        let size = bytes;
+        let size = Number(bytes);
+        if (isNaN(size)) return '0 B';
         while (size >= 1024 && i < units.length - 1) { size /= 1024; i++; }
         return (size < 10 ? size.toFixed(2) : size.toFixed(1)) + ' ' + units[i];
     }
