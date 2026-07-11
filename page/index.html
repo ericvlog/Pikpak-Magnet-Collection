@@ -3362,9 +3362,9 @@ function loginGDrive() {
             const icon = isFolder ? '📁' : '📄';
             html += `<div class="share-file-row" data-id="${escapeHtml(f.id)}" data-folder="${isFolder}" style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:8px;cursor:pointer;transition:background .15s;">`;
             if (isFolder) {
-                html += `<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${icon} ${escapeHtml(name)}${size ? ` <span style="color:var(--text-secondary);font-size:0.75rem;">(${size})</span>` : ''}</span><span style="flex-shrink:0;font-size:0.75rem;color:var(--text-secondary);">点击进入 &gt;</span>`;
+                html += `<span style="flex:1;">${icon} ${escapeHtml(name)}${size ? ` <span style="color:var(--text-secondary);font-size:0.75rem;">(${size})</span>` : ''}</span><span style="flex-shrink:0;font-size:0.75rem;color:var(--text-secondary);">点击进入 &gt;</span>`;
             } else {
-                html += `<input type="checkbox" class="share-file-cb" data-file-id="${escapeHtml(f.id)}" checked style="flex-shrink:0;"> <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${icon} ${escapeHtml(name)}${size ? ` <span style="color:var(--text-secondary);font-size:0.75rem;">(${size})</span>` : ''}</span>`;
+                html += `<input type="checkbox" class="share-file-cb" data-file-id="${escapeHtml(f.id)}" checked style="flex-shrink:0;"> <span style="flex:1;">${icon} ${escapeHtml(name)}${size ? ` <span style="color:var(--text-secondary);font-size:0.75rem;">(${size})</span>` : ''}</span>`;
             }
             html += '</div>';
         }
