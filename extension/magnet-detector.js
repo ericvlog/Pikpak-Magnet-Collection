@@ -1039,6 +1039,7 @@
                     errorMsg.includes('too many requests') ||
                     errorMsg.includes('限流') ||
                     errorMsg.includes('冷却')) {
+                    markButtonAsPreviewed(magnetLink);
                     saveFailedMagnet(magnetLink, title);
                     if (!cooldownToast) {
                         showToast('预览服务繁忙，已记录失败磁力', true);
