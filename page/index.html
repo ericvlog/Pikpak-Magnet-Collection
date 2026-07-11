@@ -3355,9 +3355,13 @@ function loginGDrive() {
             html += '<div style="padding:4px 8px;margin-bottom:6px;font-size:0.8rem;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📁 ' + shareNavPath.map(p => escapeHtml(p.name)).join(' / ') + '</div>';
         }
         // 只显示文件夹（可点击进入）
-        for (const f of folders) {
+        const folderHints = {};
+        for (let i = 0; i < folders.length; i++) {
+            const f = folders[i];
             const name = f.name || '未知';
-            html += `<div class="share-file-row" data-id="${escapeHtml(f.id)}" data-folder="true" style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:8px;cursor:pointer;transition:background .15s;"><span style="flex:1;">📁 ${escapeHtml(name)}</span><span class="folder-size-hint" style="flex-shrink:0;font-size:0.75rem;color:var(--text-secondary);">...</span></div>`;
+            const hintId = 'fsh_' + Date.now() + '_' + i;
+            folderHints[f.id] = hintId;
+            html += `<div class="share-file-row" data-id="${escapeHtml(f.id)}" data-folder="true" style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:8px;cursor:pointer;transition:background .15s;"><span style="flex:1;">📁 ${escapeHtml(name)}</span><span id="${hintId}" style="flex-shrink:0;font-size:0.75rem;color:var(--text-secondary);">...</span></div>`;
         }
         if (folders.length === 0) {
             html += '<div style="text-align:center;padding:1rem;color:var(--text-secondary);font-size:0.85rem;">该目录下没有子文件夹</div>';
@@ -3368,16 +3372,16 @@ function loginGDrive() {
         // 异步计算每个文件夹内文件数和大小
         if (folders.length > 0) {
             Promise.all(folders.map(async (f) => {
+                const hintEl = document.getElementById(folderHints[f.id]);
+                if (!hintEl) return;
                 try {
                     const children = await getPikpakShareFolderViaBridge(shareNavShareId, shareNavPassCodeToken, f.id);
                     const subFiles = children.filter(c => c.kind !== 'drive#folder');
                     const subFolders = children.filter(c => c.kind === 'drive#folder');
                     const subSize = subFiles.reduce((s, c) => s + (Number(c.size) || 0), 0);
-                    const hint = container.querySelector(`.share-file-row[data-id="${CSS.escape(f.id)}"] .folder-size-hint`);
-                    if (hint) hint.textContent = `${subFiles.length} 个文件, ${subFolders.length} 个文件夹${subSize > 0 ? `, ${formatSize(subSize)}` : ''}`;
+                    hintEl.textContent = `${subFiles.length} 个文件, ${subFolders.length} 个文件夹${subSize > 0 ? `, ${formatSize(subSize)}` : ''}`;
                 } catch (e) {
-                    const hint = container.querySelector(`.share-file-row[data-id="${CSS.escape(f.id)}"] .folder-size-hint`);
-                    if (hint) hint.textContent = '';
+                    hintEl.textContent = '';
                 }
             })).catch(() => {});
         }
