@@ -899,6 +899,9 @@
 <div id="tagModal" class="modal"><div class="modal-card"><div class="flex-between"><h3>管理标签</h3><button id="closeTagModalBtn">✖</button></div><div class="tag-manager" style="padding:1rem 1.5rem;"><div id="tagList"></div><div style="margin-top:1rem;"><input type="text" id="newTagName" placeholder="新标签"><button id="addTagBtn" class="btn btn-primary" style="margin-top:0.5rem;">添加</button></div></div></div></div>
 <div id="batchTagModal" class="modal"><div class="modal-card"><div class="flex-between"><h3>批量添加标签</h3><button id="closeBatchTagModalBtn" class="icon-btn">✖</button></div><div class="batch-tag-selector"><div id="batchTagSelectorContainer" style="max-height:300px;overflow-y:auto;border:1px solid var(--border-color);border-radius:16px;padding:8px;"></div><div style="margin-top:1rem;display:flex;gap:8px;justify-content:flex-end;"><button id="confirmBatchTagsBtn" class="btn btn-primary">添加标签</button><button id="cancelBatchTagsBtn" class="btn btn-outline">取消</button></div></div></div></div>
 <div id="autoTagRuleModal" class="modal"><div class="modal-card"><div class="flex-between"><h3>自动标签规则</h3><button id="closeRuleModalBtn" class="icon-btn">✖</button></div><div class="rule-editor"><div id="rulesListContainer" style="max-height:300px;overflow-y:auto;"></div><div style="margin-top:1rem;"><input type="text" id="newRuleKeyword" placeholder="关键词 (如 4K)" style="width:48%;display:inline-block;margin-right:2%;"><select id="newRuleTagSelect" style="width:48%;display:inline-block;"></select><button id="addRuleBtn" class="btn btn-primary" style="margin-top:0.5rem;width:100%;">添加规则</button></div></div></div></div>
+
+<!-- ===== 合并选择模态框 ===== -->
+<div id="mergeModal" class="modal"><div class="modal-card" style="max-width:500px;"><div class="flex-between"><h3>🔗 选择主卡片</h3><button id="closeMergeModalBtn" class="icon-btn">✖</button></div><div style="padding:1rem;"><div style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:12px;">选择保留哪张卡片的标题和图片作为合并后的主卡片：</div><div id="mergeCardList" style="max-height:50vh;overflow-y:auto;border:1px solid var(--border-color);border-radius:12px;padding:8px;"></div><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;"><button id="confirmMergeBtn" class="btn btn-primary">✅ 确认合并</button><button id="cancelMergeBtn" class="btn btn-outline">取消</button></div></div></div></div>
 <div id="duplicateModal" class="modal"><div class="modal-card"><div class="flex-between"><h3>清理重复项</h3><button id="closeDuplicateModalBtn" class="icon-btn">✖</button></div><div class="duplicate-list"><div class="duplicate-mode-selector"><span>检测模式：</span><label><input type="radio" name="dupMode" value="magnet" checked> 按磁力链接</label><label><input type="radio" name="dupMode" value="messageUrl"> 按电报链接</label><label><input type="radio" name="dupMode" value="title"> 按标题</label></div><div class="similarity-control" id="similarityControl"><span>相似度阈值：</span><input type="range" id="similaritySlider" min="70" max="100" value="80" step="1"><span id="similarityValue">80%</span><span style="font-size:0.7rem;"> (仅按标题模式)</span></div><div id="duplicateGroupsContainer"></div><div style="display:flex;justify-content:flex-end;gap:12px;margin-top:1rem;"><button id="keepOnePerGroupBtn" class="btn btn-danger" style="display:none;">⚡ 一键保留一个 (电报模式)</button><button id="applyDuplicateResolutionBtn" class="btn btn-primary">全局应用</button><button id="cancelDuplicateBtn" class="btn btn-outline">取消</button></div></div></div></div>
 <div id="batchAddModal" class="modal"><div class="modal-card" style="max-width:850px;"><div class="flex-between"><h3>📥 批量添加磁力</h3><button id="closeBatchAddModalBtn" class="icon-btn">✖</button></div><div style="padding:1rem;"><div style="margin-bottom: 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px;"><span style="font-size:0.9rem; color:var(--text-secondary);">📋 粘贴多个磁力链接（每行一个）</span></div><div style="display:flex;gap:8px;align-items:stretch;flex-wrap:wrap;"><textarea id="batchMagnetInput" placeholder="每行一个磁力链接" style="flex:1;min-height:100px;padding:8px;border-radius:12px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--text-primary);font-family:monospace;"></textarea><div style="display:flex;flex-direction:column;gap:6px;justify-content:center;"><button id="parseBatchBtn" class="btn btn-primary">🔍 解析</button><button id="clearBatchInputBtn" class="btn btn-outline">清空</button></div></div><div id="batchParseResult" style="margin-top:12px;max-height:55vh;overflow-y:auto;border:1px solid var(--border-color);border-radius:12px;padding:8px;display:none;"><div id="batchItemList"></div><div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-top:12px;padding-top:12px;border-top:1px solid var(--border-color);"><button id="batchOfflineAllBtn" class="btn btn-primary">📥 全部离线</button><button id="batchSaveAllBtn" class="btn btn-success">💾 全部保存</button><button id="batchBothAllBtn" class="btn btn-primary" style="background:#0f3b3f;">⚡ 全部离线并保存</button><button id="batchDeleteAllBtn" class="btn btn-danger">🗑️ 全部删除</button><button id="batchClearSuccessBtn" class="btn btn-outline">🧹 清除已操作</button></div></div></div></div></div>
 <div id="clientIdModal" class="modal"><div class="modal-card" style="max-width:460px;"><div class="flex-between"><h3>🔑 Google OAuth 设置</h3><button id="closeClientIdModalBtn" class="icon-btn">✖</button></div><div style="padding:1.5rem;display:flex;flex-direction:column;gap:14px;"><div style="font-size:0.9rem;line-height:1.5;color:var(--text-secondary);">请先到 Google Cloud Console 创建 OAuth 2.0 Client ID：<br><a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color:#4285f4;font-weight:600;">https://console.cloud.google.com/apis/credentials ➚</a></div><input type="text" id="clientIdInput" placeholder="粘贴您的 Client ID" style="width:100%;padding:10px 14px;border-radius:12px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--text-primary);font-family:monospace;font-size:0.85rem;"><div style="display:flex;gap:10px;justify-content:flex-end;"><button id="confirmClientIdBtn" class="btn btn-primary">确认</button><button id="cancelClientIdBtn" class="btn btn-outline">取消</button></div></div></div></div>
@@ -2385,6 +2388,8 @@ function bindMagnetLinkEvents() {
     function selectAllFiltered(){ allFilteredMagnets.forEach(m=>selectedCardIds.add(m.id)); renderLoadedCards(); updateSelectedCount(); showToast(`已选择所有筛选结果中的 ${allFilteredMagnets.length} 张卡片`); }
     async function batchDelete(){ if(selectedCardIds.size===0){ alert('请先选择卡片'); return; } if(confirm(`确定要永久删除选中的 ${selectedCardIds.size} 张卡片吗？`)){ const toDel=Array.from(selectedCardIds); magnets=magnets.filter(m=>!selectedCardIds.has(m.id)); selectedCardIds.clear(); await saveToDB(); updateFilteredList(); currentLoadedCount=0; renderLoadedCards(); updateStats(allFilteredMagnets.length,magnets.length); showToast(`已删除 ${toDel.length} 张卡片`); updateSelectedCount(); if(selectionMode) toggleSelectionMode(); } }
     async function batchReFetchCards(){ if(selectedCardIds.size===0){ alert('请先选择卡片'); return; } const cards=Array.from(selectedCardIds).map(id=>magnets.find(m=>m.id===id)).filter(Boolean); const withUrl=cards.filter(m=>m.messageUrl); if(withUrl.length===0){ alert('选中的卡片没有 t.me 链接，无法重新获取'); return; } if(!confirm(`确定要重新获取 ${withUrl.length} 张卡片的 Telegram 链接吗？将删除旧卡片并创建新的待处理卡片。`)) return; showToast(`正在重新获取 ${withUrl.length} 张卡片...`); let ok=0,fail=0; for(const m of withUrl){ try{ await resolveTgLinkViaBridge(m.messageUrl); ok++; }catch(e){ fail++; console.warn('重新获取失败:', m.messageUrl, e.message); } } magnets=magnets.filter(m=>!selectedCardIds.has(m.id)); selectedCardIds.clear(); await saveToDB(); updateFilteredList(); currentLoadedCount=0; renderLoadedCards(); updateStats(allFilteredMagnets.length,magnets.length); updateSelectedCount(); if(selectionMode) toggleSelectionMode(); setTimeout(()=>{ if(typeof importFromExtension==='function') importFromExtension(); },800); showToast(`✅ 已重新获取 ${ok} 张卡片${fail>0?`, ${fail} 张失败`:''}`); }
+    let _mergeCandidates = []; // 暂存待合并卡片
+
     async function batchMergeCards(){
         if (selectedCardIds.size < 2) { showToast('请至少选择 2 张卡片合并', true); return; }
         const cards = Array.from(selectedCardIds).map(id => magnets.find(m => m.id === id)).filter(Boolean);
@@ -2392,10 +2397,31 @@ function bindMagnetLinkEvents() {
         cards.forEach(c => { if (c.fileId || (c.fileIds && c.fileIds.length)) types.add('tg'); else if (c.magnetLink) types.add('magnet'); else types.add('other'); });
         if (types.size > 1) { showToast('只能合并同类卡片（全部为 TG 视频或全部为磁力）', true); return; }
         if (types.has('other')) { showToast('不支持的卡片类型', true); return; }
-        const idsToRemove = Array.from(selectedCardIds);
-        const first = cards[0];
-        const rest = cards.slice(1);
-        if (types.has('tg')) {
+        _mergeCandidates = cards;
+        const listEl = document.getElementById('mergeCardList');
+        listEl.innerHTML = cards.map((c, idx) => {
+            const title = escapeHtml(c.title?.substring(0, 60) || '无标题');
+            const img = c.imageUrl ? `<img src="${c.imageUrl.startsWith('img_') ? '' : escapeHtml(c.imageUrl)}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;flex-shrink:0;background:var(--tag-bg);">` : '<div style="width:40px;height:40px;border-radius:6px;background:var(--tag-bg);flex-shrink:0;"></div>';
+            const count = types.has('tg')
+                ? ((c.fileIds?.length) || (c.fileId ? 1 : 0)) + ' 个视频'
+                : ((c.magnetLinks?.length) || (c.magnetLink ? 1 : 0)) + ' 个磁力';
+            return `<label style="display:flex;align-items:center;gap:8px;padding:8px;border-radius:8px;cursor:pointer;border:1px solid transparent;transition:all .15s;" onmouseover="this.style.borderColor='var(--border-color)'" onmouseout="this.style.borderColor='transparent'"><input type="radio" name="mergePrimary" value="${idx}"${idx===0?' checked':''}>${img}<div style="flex:1;min-width:0;"><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.85rem;">${title}</div><div style="font-size:0.75rem;color:var(--text-secondary);">${count}</div></div></label>`;
+        }).join('');
+        document.getElementById('mergeModal').style.display = 'flex';
+    }
+
+    document.getElementById('closeMergeModalBtn').onclick = () => { document.getElementById('mergeModal').style.display = 'none'; };
+    document.getElementById('cancelMergeBtn').onclick = () => { document.getElementById('mergeModal').style.display = 'none'; };
+    document.getElementById('mergeModal').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.target.style.display = 'none'; });
+    document.getElementById('confirmMergeBtn').onclick = async () => {
+        const selected = document.querySelector('input[name="mergePrimary"]:checked');
+        if (!selected) { showToast('请选择主卡片', true); return; }
+        const primaryIdx = parseInt(selected.value);
+        const cards = _mergeCandidates;
+        const first = cards[primaryIdx];
+        const idsToRemove = cards.map(c => c.id).filter(id => id !== first.id);
+        const hasTg = cards.some(c => c.fileId || (c.fileIds && c.fileIds.length));
+        if (hasTg) {
             const allFileIds = [];
             const allFileMeta = {};
             const allImages = [];
@@ -2409,10 +2435,8 @@ function bindMagnetLinkEvents() {
             first.fileIds = allFileIds;
             first.fileId = allFileIds[0] || first.fileId;
             first.fileMeta = allFileMeta;
-            first.videoUrl = first.videoUrl || '';
-            first.imageUrl = allImages[0] || first.imageUrl;
-            first.extraImages = allImages.slice(1);
-        } else if (types.has('magnet')) {
+            first.extraImages = allImages.filter(url => url !== first.imageUrl);
+        } else {
             const allLinks = [];
             for (const c of cards) {
                 if (c.magnetLinks && c.magnetLinks.length) allLinks.push(...c.magnetLinks);
@@ -2421,7 +2445,7 @@ function bindMagnetLinkEvents() {
             first.magnetLinks = allLinks;
             first.magnetLink = allLinks[0];
         }
-        magnets = magnets.filter(m => !idsToRemove.includes(m.id) || m.id === first.id);
+        magnets = magnets.filter(m => !idsToRemove.includes(m.id));
         selectedCardIds.clear();
         await saveToDB();
         updateFilteredList();
@@ -2430,8 +2454,9 @@ function bindMagnetLinkEvents() {
         updateStats(allFilteredMagnets.length, magnets.length);
         updateSelectedCount();
         if (selectionMode) toggleSelectionMode();
+        document.getElementById('mergeModal').style.display = 'none';
         showToast(`✅ 已合并 ${cards.length} 张卡片`);
-    }
+    };
     function openBatchAddTags(){ if(selectedCardIds.size===0){ alert('请先选择卡片'); return; } const container=document.getElementById('batchTagSelectorContainer'); container.innerHTML=''; tags.forEach(tag=>{ const span=document.createElement('span'); span.className='tag-option'; span.textContent=`# ${tag.name}`; span.dataset.id=tag.id; span.onclick=()=>{ span.classList.toggle('selected'); }; container.appendChild(span); }); document.getElementById('batchTagModal').style.display='flex'; }
     async function confirmBatchAddTags(){ const selected=Array.from(document.querySelectorAll('#batchTagSelectorContainer .tag-option.selected')).map(span=>parseInt(span.dataset.id)); if(selected.length===0){ alert('请至少选择一个标签'); return; } for(const id of selectedCardIds){ const m=magnets.find(m=>m.id===id); if(m){ for(const tid of selected){ if(!m.tagIds.includes(tid)) m.tagIds.push(tid); } } } await saveToDB(); updateFilteredList(); currentLoadedCount=0; renderLoadedCards(); updateStats(allFilteredMagnets.length,magnets.length); showToast(`已为 ${selectedCardIds.size} 个卡片添加所选标签`); document.getElementById('batchTagModal').style.display='none'; updateSelectedCount(); }
     function cancelSelection(){ if(selectionMode) toggleSelectionMode(); }
