@@ -3324,6 +3324,7 @@ function loginGDrive() {
     function clearPendingQueue() { return new Promise((resolve, reject) => { const handler = (event) => { if (event.data && event.data.type === 'CLEAR_PENDING_MAGNETS_RESULT') { window.removeEventListener('message', handler); if (event.data.success) resolve(); else reject(new Error(event.data.error || '清空失败')); } }; window.addEventListener('message', handler); window.postMessage({ type: 'REQUEST_CLEAR_PENDING_MAGNETS' }, '*'); setTimeout(() => { window.removeEventListener('message', handler); reject(new Error('扩展未响应')); }, 10000); }); }
     function getPikpakShareInfoViaBridge(shareUrl) { return new Promise((resolve, reject) => { if (!window.__MAGNET_HELPER_EXTENSION__) { reject(new Error('扩展未安装')); return; } const handler = (event) => { if (event.data && event.data.type === 'PIKPAK_SHARE_INFO_RESULT') { window.removeEventListener('message', handler); if (event.data.success) { resolve({ success: true, shareId: event.data.shareId, passCodeToken: event.data.passCodeToken, files: event.data.files }); } else { reject(new Error(event.data.error || '获取失败')); } } }; window.addEventListener('message', handler); window.postMessage({ type: 'REQUEST_PIKPAK_SHARE_INFO', shareUrl }, '*'); setTimeout(() => { window.removeEventListener('message', handler); reject(new Error('扩展未响应')); }, 20000); }); }
     function savePikpakShareFilesViaBridge(shareId, passCodeToken, fileIds, parentId) { return new Promise((resolve, reject) => { if (!window.__MAGNET_HELPER_EXTENSION__) { reject(new Error('扩展未安装')); return; } const handler = (event) => { if (event.data && event.data.type === 'SAVE_PIKPAK_SHARE_FILES_RESULT') { window.removeEventListener('message', handler); if (event.data.success) { resolve(event.data.data); } else { reject(new Error(event.data.error || '转存失败')); } } }; window.addEventListener('message', handler); window.postMessage({ type: 'REQUEST_SAVE_PIKPAK_SHARE_FILES', shareId, passCodeToken, fileIds, parentId }, '*'); setTimeout(() => { window.removeEventListener('message', handler); reject(new Error('扩展未响应')); }, 60000); }); }
+    function getPikpakShareFolderViaBridge(shareId, passCodeToken, parentId) { return new Promise((resolve, reject) => { if (!window.__MAGNET_HELPER_EXTENSION__) { reject(new Error('扩展未安装')); return; } const handler = (event) => { if (event.data && event.data.type === 'PIKPAK_SHARE_FOLDER_RESULT') { window.removeEventListener('message', handler); if (event.data.success) { resolve(event.data.files); } else { reject(new Error(event.data.error || '获取目录失败')); } } }; window.addEventListener('message', handler); window.postMessage({ type: 'REQUEST_PIKPAK_SHARE_FOLDER', shareId, passCodeToken, parentId }, '*'); setTimeout(() => { window.removeEventListener('message', handler); reject(new Error('扩展未响应')); }, 20000); }); }
     function fetchFolderTreeFromExtension() { return new Promise((resolve, reject) => { if (!window.__MAGNET_HELPER_EXTENSION__) { reject(new Error('扩展未安装')); return; } const handler = (event) => { if (event.data && event.data.type === 'FOLDER_TREE_RESULT') { window.removeEventListener('message', handler); if (event.data.success) { resolve(event.data.data || []); } else { reject(new Error(event.data.error || '获取文件夹失败')); } } }; window.addEventListener('message', handler); window.postMessage({ type: 'REQUEST_FOLDER_TREE' }, '*'); setTimeout(() => { window.removeEventListener('message', handler); reject(new Error('扩展未响应')); }, 15000); }); }
     async function importFromExtension() { try { if (window.__MAGNET_HELPER_EXTENSION__) { await new Promise((resolve) => { const handler = (event) => { if (event.data && event.data.type === 'BOT_POLL_COMPLETE') { window.removeEventListener('message', handler); resolve(); } }; window.addEventListener('message', handler); window.postMessage({ type: 'REQUEST_BOT_POLL' }, '*'); setTimeout(() => { window.removeEventListener('message', handler); resolve(); }, 3000); }); } const result = await fetchPendingFromExtension(); if (!result.data || result.data.length === 0) { showToast('扩展队列为空', false); return; } const items = result.data.map(item => ({ title: item.title || '未知', magnetLink: item.magnet || '', videoUrl: item.videoUrl || '', size: item.size || '', imageUrl: item.imageUrl || '', extraImages: item.extraImages || [], messageUrl: item.messageUrl || '', fileId: item.fileId || '', fileIds: item.fileIds || [], restricted: item.restricted || false, fileMeta: item.fileMeta || {}, shareUrl: item.shareUrl || '' })); const newMagnets = []; for (const src of items) { const title = src.title || ''; const magnetLink = src.magnetLink || ''; const videoUrl = src.videoUrl || ''; const size = src.size || ''; const fileId = src.fileId || ''; const fileIds = src.fileIds || []; if (magnetLink && (magnets.some(m => m.magnetLink && m.magnetLink.toLowerCase() === magnetLink.toLowerCase()) || newMagnets.some(m => m.magnetLink && m.magnetLink.toLowerCase() === magnetLink.toLowerCase()))) continue; if (videoUrl && (magnets.some(m => m.videoUrl && m.videoUrl.toLowerCase() === videoUrl.toLowerCase()) || newMagnets.some(m => m.videoUrl && m.videoUrl.toLowerCase() === videoUrl.toLowerCase()))) continue; if (src.messageUrl && (magnets.some(m => m.messageUrl && m.messageUrl === src.messageUrl) || newMagnets.some(m => m.messageUrl && m.messageUrl === src.messageUrl))) continue; let finalImageUrl = src.imageUrl || ''; if (finalImageUrl && !finalImageUrl.startsWith('img_') && (finalImageUrl.startsWith('http://') || finalImageUrl.startsWith('https://'))) { try { let blob = null; if (window.__MAGNET_HELPER_EXTENSION__) { try { blob = await fetchImageViaExtension(finalImageUrl); } catch(e) {} } if (!blob) { const response = await fetch(finalImageUrl); if (response.ok) blob = await response.blob(); } if (blob) { const newId = await storeImageBlob(finalImageUrl, blob); if (newId) finalImageUrl = newId; } } catch(err) { console.warn('导入时图片处理失败:', err.message); } } let extraImageIds = []; for (const extraUrl of (src.extraImages || [])) { try { let blob = null; if (window.__MAGNET_HELPER_EXTENSION__) { try { blob = await fetchImageViaExtension(extraUrl); } catch(e) {} } if (!blob) { const resp = await fetch(extraUrl); if (resp.ok) blob = await resp.blob(); } if (blob) { const newId = await storeImageBlob(extraUrl, blob); if (newId) extraImageIds.push(newId); } } catch(e) { console.warn('额外图片导入失败:', e.message); } } const cleanedTitle = cleanTitle(title); const newMagnet = { id: nextMagnetId++, magnetLink: magnetLink, videoUrl: videoUrl, title: cleanedTitle, imageUrl: finalImageUrl, extraImages: extraImageIds, messageUrl: src.messageUrl || '', fileId: fileId || '', fileIds: fileIds, fileMeta: src.fileMeta || {}, size: size, shareUrl: src.shareUrl || '', tagIds: [], rating: 0, createdAt: Date.now(), restricted: src.restricted || false }; applyAutoTagsToMagnet(newMagnet); newMagnets.push(newMagnet); } if (newMagnets.length === 0) { showToast('没有新的磁力链接（可能均已存在）', true); return; } magnets.push(...newMagnets); await saveToDB(); updateFilteredList(); currentLoadedCount = 0; renderLoadedCards(); updateStats(allFilteredMagnets.length, magnets.length); const clearAfter = document.getElementById('clearAfterImport')?.checked ?? false; if (clearAfter) { try { await new Promise((resolve, reject) => { const handler = (event) => { if (event.data && event.data.type === 'CLEAR_PENDING_MAGNETS_RESULT') { window.removeEventListener('message', handler); if (event.data.success) { resolve(true); } else { reject(new Error(event.data.error || '清空失败')); } } }; window.addEventListener('message', handler); window.postMessage({ type: 'REQUEST_CLEAR_PENDING_MAGNETS' }, '*'); setTimeout(() => { window.removeEventListener('message', handler); reject(new Error('清空请求超时')); }, 5000); }); showToast(`✅ 从扩展成功导入 ${newMagnets.length} 条磁力，已清空队列`); } catch (err) { showToast(`✅ 从扩展成功导入 ${newMagnets.length} 条磁力，但清空队列失败`, true); } } else { showToast(`✅ 从扩展成功导入 ${newMagnets.length} 条磁力（保留队列）`); } } catch (err) { showToast('❌ 从扩展导入失败：' + err.message, true); } }
     function startAutoImport() { const intervalInput = document.getElementById('autoImportInterval'); const minutes = parseFloat(intervalInput.value) || 10; if (minutes < 0.1) { alert('间隔至少 0.1 分钟'); return; } if (autoImportTimer) clearInterval(autoImportTimer); autoImportTimer = setInterval(() => { importFromExtension(); }, minutes * 60 * 1000); const toggleBtn = document.getElementById('autoImportToggleBtn'); if (toggleBtn) { toggleBtn.innerHTML = '<i class="fas fa-pause"></i> 停止'; toggleBtn.style.background = '#ef4444'; } document.getElementById('autoImportStatus').textContent = `⏳ 每 ${minutes} 分钟自动导入`; localStorage.setItem('autoImportRunning', 'true'); localStorage.setItem('autoImportInterval', String(minutes)); showToast(`自动导入已启动，间隔 ${minutes} 分钟`); }
@@ -3333,6 +3334,85 @@ function loginGDrive() {
     // ===== PikPak 共享目录转存 =====
     let shareSaveParentId = '';
     let shareSaveFolderName = '📁 默认文件夹';
+    let shareNavPath = []; // 共享目录内导航栈：{id, name}
+    let shareNavShareId = '';
+    let shareNavPassCodeToken = '';
+
+    function renderShareFileList(container, files, selectAllEl, fileCountEl) {
+        if (files.length === 0) {
+            container.innerHTML = '<div style="text-align:center;padding:1rem;color:var(--text-secondary);">该目录没有文件</div>';
+            fileCountEl.textContent = '共 0 个文件';
+            document.getElementById('startShareSaveBtn').disabled = true;
+            return;
+        }
+        let html = '';
+        // 如果不在根目录，显示返回上级
+        if (shareNavPath.length > 0) {
+            html += '<div class="share-nav-back" style="padding:6px 8px;cursor:pointer;border-radius:8px;margin-bottom:4px;font-size:0.9rem;">← 返回上级</div>';
+        }
+        // 显示当前面包屑
+        if (shareNavPath.length > 0) {
+            html += '<div style="padding:4px 8px;margin-bottom:6px;font-size:0.8rem;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📁 ' + shareNavPath.map(p => escapeHtml(p.name)).join(' / ') + '</div>';
+        }
+        // 目录中的文件和文件夹
+        for (const f of files) {
+            const name = f.name || '未知';
+            const size = f.size ? formatSize(f.size) : '';
+            const isFolder = f.kind === 'drive#folder';
+            const icon = isFolder ? '📁' : '📄';
+            html += `<div class="share-file-row" data-id="${escapeHtml(f.id)}" data-folder="${isFolder}" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;cursor:pointer;transition:background .15s;">`;
+            if (isFolder) {
+                html += `<span style="flex:1;">${icon} ${escapeHtml(name)}${size ? ` <span style="color:var(--text-secondary);font-size:0.75rem;">(${size})</span>` : ''}</span><span style="font-size:0.75rem;color:var(--text-secondary);">点击进入 &gt;</span>`;
+            } else {
+                html += `<input type="checkbox" class="share-file-cb" data-file-id="${escapeHtml(f.id)}" checked> <span style="flex:1;">${icon} ${escapeHtml(name)}${size ? ` <span style="color:var(--text-secondary);font-size:0.75rem;">(${size})</span>` : ''}</span>`;
+            }
+            html += '</div>';
+        }
+        container.innerHTML = html;
+        fileCountEl.textContent = `共 ${files.length} 项`;
+
+        // 挂载事件
+        container.querySelectorAll('.share-file-row').forEach(row => {
+            row.addEventListener('click', async (e) => {
+                if (e.target.tagName === 'INPUT' || e.target.closest('input')) return;
+                const isFolder = row.getAttribute('data-folder') === 'true';
+                if (isFolder) {
+                    const folderId = row.getAttribute('data-id');
+                    try {
+                        container.innerHTML = '<div style="text-align:center;padding:1rem;color:var(--text-secondary);">加载中...</div>';
+                        shareNavPath.push({ id: folderId, name: row.querySelector('span')?.textContent?.replace(/\([\d.]+\s*\w+\)/g, '').trim() || '文件夹' });
+                        const children = await getPikpakShareFolderViaBridge(shareNavShareId, shareNavPassCodeToken, folderId);
+                        renderShareFileList(container, children, selectAllEl, fileCountEl);
+                    } catch (err) {
+                        shareNavPath.pop();
+                        renderShareFileList(container, files, selectAllEl, fileCountEl);
+                        showToast('❌ 加载失败: ' + err.message, true);
+                    }
+                } else {
+                    const cb = row.querySelector('.share-file-cb');
+                    if (cb) cb.checked = !cb.checked;
+                }
+            });
+            row.addEventListener('mouseover', () => row.style.background = 'var(--tag-bg)');
+            row.addEventListener('mouseout', () => row.style.background = '');
+        });
+        // 返回上级
+        const backEl = container.querySelector('.share-nav-back');
+        if (backEl) {
+            backEl.addEventListener('click', async () => {
+                try {
+                    const prevId = shareNavPath.length > 1 ? shareNavPath[shareNavPath.length - 2].id : '';
+                    shareNavPath.pop();
+                    container.innerHTML = '<div style="text-align:center;padding:1rem;color:var(--text-secondary);">加载中...</div>';
+                    const children = await getPikpakShareFolderViaBridge(shareNavShareId, shareNavPassCodeToken, prevId);
+                    renderShareFileList(container, children, selectAllEl, fileCountEl);
+                } catch (err) {
+                    showToast('❌ 加载失败: ' + err.message, true);
+                }
+            });
+        }
+        document.getElementById('startShareSaveBtn').disabled = false;
+    }
 
     function showShareFilePicker(card, shareId, passCodeToken, files) {
         const modal = document.getElementById('shareSaveModal');
@@ -3343,24 +3423,14 @@ function loginGDrive() {
         titleEl.textContent = `📂 ${escapeHtml(card.title || '')}`;
         shareSaveParentId = '';
         shareSaveFolderName = '📁 默认文件夹';
+        shareNavPath = [];
+        shareNavShareId = shareId;
+        shareNavPassCodeToken = passCodeToken;
         document.getElementById('shareFolderName').textContent = shareSaveFolderName;
-        if (files.length === 0) {
-            fileListEl.innerHTML = '<div style="text-align:center;padding:1rem;color:var(--text-secondary);">该共享目录没有文件</div>';
-            fileCountEl.textContent = '共 0 个文件';
-            document.getElementById('startShareSaveBtn').disabled = true;
-        } else {
-            fileListEl.innerHTML = files.map((f, idx) => {
-                const name = f.name || f.kind || '未知';
-                const size = f.size ? formatSize(f.size) : '';
-                const icon = f.kind === 'drive#folder' ? '📁' : '📄';
-                return `<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;cursor:pointer;transition:background .15s;" onmouseover="this.style.background='var(--tag-bg)'" onmouseout="this.style.background=''"><input type="checkbox" class="share-file-cb" data-file-id="${escapeHtml(f.id)}" checked> <span>${icon} ${escapeHtml(name)}${size ? ` <span style="color:var(--text-secondary);font-size:0.75rem;">(${size})</span>` : ''}</span></label>`;
-            }).join('');
-            fileCountEl.textContent = `共 ${files.length} 个文件`;
-            document.getElementById('startShareSaveBtn').disabled = false;
-            selectAllEl.onchange = () => {
-                fileListEl.querySelectorAll('.share-file-cb').forEach(cb => cb.checked = selectAllEl.checked);
-            };
-        }
+        selectAllEl.onchange = () => {
+            fileListEl.querySelectorAll('.share-file-cb').forEach(cb => cb.checked = selectAllEl.checked);
+        };
+        renderShareFileList(fileListEl, files, selectAllEl, fileCountEl);
         document.getElementById('startShareSaveBtn').onclick = async () => {
             const btn = document.getElementById('startShareSaveBtn');
             btn.disabled = true;
@@ -3386,32 +3456,69 @@ function loginGDrive() {
     document.getElementById('cancelShareSaveBtn').onclick = () => document.getElementById('shareSaveModal').style.display = 'none';
     document.getElementById('shareSaveModal').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.style.display = 'none'; });
 
-    // 共享目录文件夹选择器
-    document.getElementById('shareFolderSelector').addEventListener('click', () => {
+    // 共享目录目标文件夹选择器（层级导航，类似预览弹窗）
+    let shareFolderPath = [];
+    document.getElementById('shareFolderSelector').addEventListener('click', async () => {
         const dd = document.getElementById('shareFolderDropdown');
         if (dd.style.display !== 'none') { dd.style.display = 'none'; document.getElementById('shareFolderArrow').classList.remove('open'); return; }
         dd.innerHTML = '<div style="padding:8px;text-align:center;color:var(--text-secondary);">加载中...</div>';
         dd.style.display = 'block';
         document.getElementById('shareFolderArrow').classList.add('open');
-        if (window.__MAGNET_HELPER_EXTENSION__) {
-            fetchFolderTreeFromExtension().then(folders => {
-                dd.innerHTML = '<div class="folder-option" data-id="" style="padding:8px 12px;cursor:pointer;border-radius:8px;">📁 默认文件夹（根目录）</div>' + folders.map(f => `<div class="folder-option" data-id="${escapeHtml(f.id)}" style="padding:8px 12px;cursor:pointer;border-radius:8px;">📁 ${escapeHtml(f.name)}</div>`).join('');
-                dd.querySelectorAll('.folder-option').forEach(opt => {
-                    opt.addEventListener('click', () => {
-                        shareSaveParentId = opt.getAttribute('data-id');
-                        shareSaveFolderName = '📁 ' + (shareSaveParentId ? opt.textContent.trim() : '默认文件夹');
-                        document.getElementById('shareFolderName').textContent = shareSaveFolderName;
-                        dd.style.display = 'none';
-                        document.getElementById('shareFolderArrow').classList.remove('open');
-                    });
-                    opt.addEventListener('mouseover', () => opt.style.background = 'var(--tag-bg)');
-                    opt.addEventListener('mouseout', () => opt.style.background = '');
+        try {
+            const parentId = shareFolderPath.length > 0 ? shareFolderPath[shareFolderPath.length - 1].id : '';
+            const folders = await ppLoadFolderChildren(parentId);
+            let html = '';
+            if (shareFolderPath.length > 0) {
+                html += '<div class="share-folder-back" style="padding:6px 8px;cursor:pointer;border-radius:8px;font-size:0.9rem;">← 返回上级</div>';
+            }
+            html += '<div class="share-folder-option" data-id="" style="padding:6px 8px;cursor:pointer;border-radius:8px;">📁 默认文件夹（根目录）</div>';
+            for (const f of folders) {
+                const active = f.id === shareSaveParentId ? ' style="background:var(--accent-bg);"' : '';
+                html += `<div class="share-folder-option" data-id="${escapeHtml(f.id)}"${active}>📁 ${escapeHtml(f.name)}</div>`;
+            }
+            dd.innerHTML = html;
+            dd.querySelectorAll('.share-folder-option').forEach(opt => {
+                opt.addEventListener('click', () => {
+                    shareSaveParentId = opt.getAttribute('data-id');
+                    shareSaveFolderName = '📁 ' + (shareSaveParentId ? opt.textContent.trim() : '默认文件夹');
+                    document.getElementById('shareFolderName').textContent = shareSaveFolderName;
+                    dd.style.display = 'none';
+                    document.getElementById('shareFolderArrow').classList.remove('open');
                 });
-            }).catch(() => {
-                dd.innerHTML = '<div style="padding:8px;text-align:center;color:#ef4444;">加载文件夹失败</div>';
             });
-        } else {
-            dd.innerHTML = '<div style="padding:8px;text-align:center;color:var(--text-secondary);">需要安装扩展才能选择文件夹</div>';
+            const backEl = dd.querySelector('.share-folder-back');
+            if (backEl) {
+                backEl.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    shareFolderPath.pop();
+                    dd.innerHTML = '<div style="padding:8px;text-align:center;color:var(--text-secondary);">加载中...</div>';
+                    const pId = shareFolderPath.length > 0 ? shareFolderPath[shareFolderPath.length - 1].id : '';
+                    const folders = await ppLoadFolderChildren(pId);
+                    let html = '';
+                    if (shareFolderPath.length > 0) {
+                        html += '<div class="share-folder-back" style="padding:6px 8px;cursor:pointer;border-radius:8px;font-size:0.9rem;">← 返回上级</div>';
+                    }
+                    html += '<div class="share-folder-option" data-id="" style="padding:6px 8px;cursor:pointer;border-radius:8px;">📁 默认文件夹（根目录）</div>';
+                    for (const f of folders) {
+                        html += `<div class="share-folder-option" data-id="${escapeHtml(f.id)}">📁 ${escapeHtml(f.name)}</div>`;
+                    }
+                    dd.innerHTML = html;
+                    // 重新挂载事件
+                    dd.querySelectorAll('.share-folder-option').forEach(opt => {
+                        opt.addEventListener('click', () => {
+                            shareSaveParentId = opt.getAttribute('data-id');
+                            shareSaveFolderName = '📁 ' + (shareSaveParentId ? opt.textContent.trim() : '默认文件夹');
+                            document.getElementById('shareFolderName').textContent = shareSaveFolderName;
+                            dd.style.display = 'none';
+                            document.getElementById('shareFolderArrow').classList.remove('open');
+                        });
+                    });
+                    const newBack = dd.querySelector('.share-folder-back');
+                    if (newBack) newBack.addEventListener('click', async (e2) => { e2.stopPropagation(); shareFolderPath.pop(); /* handled by same logic */ });
+                });
+            }
+        } catch (err) {
+            dd.innerHTML = '<div style="padding:8px;text-align:center;color:#ef4444;">加载文件夹失败: ' + escapeHtml(err.message) + '</div>';
         }
     });
 

@@ -1691,6 +1691,29 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return true;
     }
 
+    if (request.action === 'getPikpakShareFolder') {
+        (async () => {
+            try {
+                const { shareId, passCodeToken, parentId } = request;
+                if (!shareId || !passCodeToken) throw new Error('参数不完整');
+                console.log('[扩展] 获取共享目录内容:', { shareId, parentId });
+                const url = `https://api-drive.mypikpak.com/drive/v1/share/detail?share_id=${encodeURIComponent(shareId)}&pass_code_token=${encodeURIComponent(passCodeToken)}&thumbnail_size=SIZE_LARGE&limit=200&with_audit=true${parentId ? `&parent_id=${encodeURIComponent(parentId)}` : ''}`;
+                const resp = await ppApiFetchBg(url);
+                const text = await resp.text();
+                if (!resp.ok) {
+                    let errData; try { errData = JSON.parse(text); } catch(e) {}
+                    throw new Error((errData?.error_description || '') + ` (HTTP ${resp.status})`);
+                }
+                const data = JSON.parse(text);
+                sendResponse({ success: true, files: data.files || [] });
+            } catch (err) {
+                console.error('[扩展] 获取共享目录失败:', err.message);
+                sendResponse({ success: false, error: err.message });
+            }
+        })();
+        return true;
+    }
+
     console.warn('[后台] 未知操作:', request.action);
     sendResponse({ success: false, error: '未知操作' });
     return false;

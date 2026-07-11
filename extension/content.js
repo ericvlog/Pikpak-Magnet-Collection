@@ -409,6 +409,14 @@ window.addEventListener('message', (event) => {
         });
     }
 
+    // ===== PikPak 共享目录子文件夹导航 =====
+    if (event.data.type === 'REQUEST_PIKPAK_SHARE_FOLDER') {
+        const { shareId, passCodeToken, parentId } = event.data;
+        sendMessageToBackground({ action: 'getPikpakShareFolder', shareId, passCodeToken, parentId }, (response) => {
+            window.postMessage({ type: 'PIKPAK_SHARE_FOLDER_RESULT', success: response?.success || false, files: response?.files || [], error: response?.error || '' }, '*');
+        });
+    }
+
     // --- 触发 Bot 队列检查（由页面 autoImport 驱动） ---
     if (event.data.type === 'REQUEST_BOT_POLL') {
         pollBotPendingItems().then(() => {
