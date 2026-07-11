@@ -2398,16 +2398,29 @@ function bindMagnetLinkEvents() {
         if (types.size > 1) { showToast('只能合并同类卡片（全部为 TG 视频或全部为磁力）', true); return; }
         if (types.has('other')) { showToast('不支持的卡片类型', true); return; }
         _mergeCandidates = cards;
-        const listEl = document.getElementById('mergeCardList');
-        listEl.innerHTML = cards.map((c, idx) => {
-            const title = escapeHtml(c.title?.substring(0, 60) || '无标题');
-            const img = c.imageUrl ? `<img src="${c.imageUrl.startsWith('img_') ? '' : escapeHtml(c.imageUrl)}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;flex-shrink:0;background:var(--tag-bg);">` : '<div style="width:40px;height:40px;border-radius:6px;background:var(--tag-bg);flex-shrink:0;"></div>';
-            const count = types.has('tg')
-                ? ((c.fileIds?.length) || (c.fileId ? 1 : 0)) + ' 个视频'
-                : ((c.magnetLinks?.length) || (c.magnetLink ? 1 : 0)) + ' 个磁力';
-            return `<label style="display:flex;align-items:center;gap:8px;padding:8px;border-radius:8px;cursor:pointer;border:1px solid transparent;transition:all .15s;" onmouseover="this.style.borderColor='var(--border-color)'" onmouseout="this.style.borderColor='transparent'"><input type="radio" name="mergePrimary" value="${idx}"${idx===0?' checked':''}>${img}<div style="flex:1;min-width:0;"><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.85rem;">${title}</div><div style="font-size:0.75rem;color:var(--text-secondary);">${count}</div></div></label>`;
-        }).join('');
-        document.getElementById('mergeModal').style.display = 'flex';
+        (async () => {
+            const listEl = document.getElementById('mergeCardList');
+            const rows = [];
+            for (let idx = 0; idx < cards.length; idx++) {
+                const c = cards[idx];
+                const title = escapeHtml(c.title?.substring(0, 60) || '无标题');
+                let imgUrl = '';
+                if (c.imageUrl) {
+                    if (c.imageUrl.startsWith('img_')) {
+                        try { imgUrl = await getImageUrlForCard(c); } catch(e) {}
+                    } else {
+                        imgUrl = c.imageUrl;
+                    }
+                }
+                const imgHtml = imgUrl ? `<img src="${escapeHtml(imgUrl)}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;flex-shrink:0;background:var(--tag-bg);">` : '<div style="width:40px;height:40px;border-radius:6px;background:var(--tag-bg);flex-shrink:0;"></div>';
+                const count = types.has('tg')
+                    ? ((c.fileIds?.length) || (c.fileId ? 1 : 0)) + ' 个视频'
+                    : ((c.magnetLinks?.length) || (c.magnetLink ? 1 : 0)) + ' 个磁力';
+                rows.push(`<label style="display:flex;align-items:center;gap:8px;padding:8px 4px;border-radius:8px;cursor:pointer;border:1px solid transparent;transition:all .15s;" onmouseover="this.style.borderColor='var(--border-color)'" onmouseout="this.style.borderColor='transparent'"><input type="radio" name="mergePrimary" value="${idx}"${idx===0?' checked':''} style="width:14px;height:14px;margin:0;flex-shrink:0;">${imgHtml}<div style="flex:1;min-width:0;"><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.85rem;">${title}</div><div style="font-size:0.75rem;color:var(--text-secondary);">${count}</div></div></label>`);
+            }
+            listEl.innerHTML = rows.join('');
+            document.getElementById('mergeModal').style.display = 'flex';
+        })();
     }
 
     document.getElementById('closeMergeModalBtn').onclick = () => { document.getElementById('mergeModal').style.display = 'none'; };
