@@ -2995,15 +2995,22 @@ function loginGDrive() {
                 const batch = magnets.slice(i, i + CONCURRENCY);
                 const results = await Promise.all(batch.map(async (magnet) => {
                     const resolvedImageUrl = await ensureImageReferenceIsLocal(magnet.imageUrl);
-                    const normalizedMagnet = { ...magnet, imageUrl: resolvedImageUrl || magnet.imageUrl };
-                    if (resolvedImageUrl && typeof resolvedImageUrl === 'string' && resolvedImageUrl.startsWith('img_')) {
-                        return { magnet: normalizedMagnet, imageId: resolvedImageUrl };
+                    const extraResults = [];
+                    const resolvedExtra = [];
+                    if (magnet.extraImages && magnet.extraImages.length) {
+                        for (const img of magnet.extraImages) {
+                            const r = await ensureImageReferenceIsLocal(img);
+                            resolvedExtra.push(r || img);
+                            if (r && typeof r === 'string' && r.startsWith('img_')) extraResults.push(r);
+                        }
                     }
-                    return { magnet: normalizedMagnet, imageId: null };
+                    const normalizedMagnet = { ...magnet, imageUrl: resolvedImageUrl || magnet.imageUrl, extraImages: resolvedExtra.length ? resolvedExtra : magnet.extraImages };
+                    return { magnet: normalizedMagnet, imageId: (resolvedImageUrl && typeof resolvedImageUrl === 'string' && resolvedImageUrl.startsWith('img_')) ? resolvedImageUrl : null, extraImageIds: extraResults };
                 }));
                 for (const r of results) {
                     backupMagnets.push(r.magnet);
                     if (r.imageId) imageIdsToInclude.push(r.imageId);
+                    if (r.extraImageIds && r.extraImageIds.length) imageIdsToInclude.push(...r.extraImageIds);
                 }
             }
             const uniqueImageIds = [...new Set(imageIdsToInclude.filter(Boolean))];
