@@ -874,6 +874,7 @@
             <select id="filterTypeSelect" style="padding:3px 6px;font-size:0.8rem;border-radius:6px;border:1px solid #555;background:var(--card-bg);color:var(--text-color);cursor:pointer;max-width:100px;">
                 <option value="all">📋 全部</option>
                 <option value="noTag">🏷 无标签</option>
+                <option value="hasImg">🖼 有图片</option>
                 <option value="netImg">🌐 网络图</option>
                 <option value="noImg">🚫 无图片</option>
                 <option value="telegram">📱 电报卡片</option>
@@ -4535,6 +4536,7 @@ function updateFilteredList() {
             }
             if (currentRatingFilter>0 && m.rating!==currentRatingFilter) return false;
             if (filterType === 'noTag' && m.tagIds && m.tagIds.length > 0) return false;
+            if (filterType === 'hasImg' && !m.imageUrl) return false;
             if (filterType === 'netImg' && (!m.imageUrl || m.imageUrl.startsWith('img_'))) return false;
             if (filterType === 'noImg' && m.imageUrl) return false;
             if (filterType === 'telegram') {
