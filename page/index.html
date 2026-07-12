@@ -2849,7 +2849,6 @@ async function initGDriveClient() {
                     gdriveToken = resp.access_token;
                     localStorage.setItem('gdrive_token', resp.access_token);
                     updateGDriveUI(true, '已登录');
-                    findDriveBackupFile().then(id => { if (id) gdriveFileId = id; });
                     getGDriveStorageInfo();
                 } else {
                     gdriveToken = null;
@@ -2862,19 +2861,8 @@ async function initGDriveClient() {
         const savedToken = localStorage.getItem('gdrive_token');
         if (savedToken) {
             gdriveToken = savedToken;
-            updateGDriveUI(true, '已登录 (验证中...)');
-            findDriveBackupFile().then(id => {
-                if (id) {
-                    gdriveFileId = id;
-                    updateGDriveUI(true, '✅ 已登录 (有效)');
-                } else {
-                    updateGDriveUI(true, '✅ 已登录 (可用)');
-                }
-                getGDriveStorageInfo();
-            }).catch(() => {
-                updateGDriveUI(true, '✅ 已登录 (可用)');
-                getGDriveStorageInfo();
-            });
+            updateGDriveUI(true, '已登录');
+            getGDriveStorageInfo();
         }
     }
 
