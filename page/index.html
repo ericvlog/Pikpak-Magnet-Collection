@@ -3383,10 +3383,13 @@ function loginGDrive() {
         if (gdriveFileIds.length === 0) { showToast('云端没有图片记录', false); return; }
         const usedImageIds = new Set();
         for (const m of magnets) {
-            if (m.imageUrl && m.imageUrl.startsWith('img_')) {
-                let pureId = m.imageUrl;
-                if (pureId.includes('.')) pureId = pureId.split('.')[0];
-                usedImageIds.add(pureId);
+            const allImgs = [m.imageUrl, ...(m.extraImages || [])].filter(Boolean);
+            for (const url of allImgs) {
+                if (url.startsWith('img_')) {
+                    let pureId = url;
+                    if (pureId.includes('.')) pureId = pureId.split('.')[0];
+                    usedImageIds.add(pureId);
+                }
             }
         }
         const orphaned = [];
