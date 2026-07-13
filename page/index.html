@@ -4014,12 +4014,15 @@ function loginGDrive() {
                         isJson = true;
                         clipboardMagnetLastFocusTime = Date.now();
                         for (const item of newJsonItems) {
+                            let magnetLink = item.magnetLink || item.magnet || '';
+                            let shareUrl = item.shareUrl || '';
+                            if (magnetLink && (magnetLink.startsWith('https://mypikpak.com/s/') || magnetLink.startsWith('https://mypikpak.com/d/'))) { shareUrl = magnetLink; magnetLink = ''; }
                             clipboardJsonQueue.push({
                                 title: item.title || item.name || '',
-                                magnetLink: item.magnetLink || item.magnet || '',
+                                magnetLink,
                                 size: item.size || '',
                                 imageUrl: item.imageUrl || item.image || '',
-                                shareUrl: item.shareUrl || ''
+                                shareUrl
                             });
                         }
                         saveClipboardJsonQueue();
@@ -4247,21 +4250,28 @@ function loginGDrive() {
                     parsed = JSON.parse(fixed);
                 }
                 let items = Array.isArray(parsed) ? parsed : [parsed];
-                const validItems = items.filter(item => (item.title || item.name) && (item.magnetLink || item.magnet));
+                const validItems = items.filter(item => (item.title || item.name) && (item.magnetLink || item.magnet || item.shareUrl || item.messageUrl || item.fileId || (item.fileIds && item.fileIds.length)));
                 if (validItems.length > 0) {
                     const newJsonItems = validItems.filter(item => {
                         const magnetLink = (item.magnetLink || item.magnet || '').toLowerCase();
-                        return !clipboardJsonQueue.some(q => q.magnetLink.toLowerCase() === magnetLink) &&
-                               !magnets.some(m => m.magnetLink && m.magnetLink.toLowerCase() === magnetLink);
+                        const shareUrl = (item.shareUrl || '').toLowerCase();
+                        if (magnetLink && shareUrl) return !clipboardJsonQueue.some(q => q.magnetLink && q.magnetLink.toLowerCase() === magnetLink) && !clipboardJsonQueue.some(q => q.shareUrl && q.shareUrl.toLowerCase() === shareUrl) && !magnets.some(m => m.magnetLink && m.magnetLink.toLowerCase() === magnetLink) && !magnets.some(m => m.shareUrl && m.shareUrl.toLowerCase() === shareUrl);
+                        if (magnetLink) return !clipboardJsonQueue.some(q => q.magnetLink && q.magnetLink.toLowerCase() === magnetLink) && !magnets.some(m => m.magnetLink && m.magnetLink.toLowerCase() === magnetLink);
+                        if (shareUrl) return !clipboardJsonQueue.some(q => q.shareUrl && q.shareUrl.toLowerCase() === shareUrl) && !magnets.some(m => m.shareUrl && m.shareUrl.toLowerCase() === shareUrl);
+                        return false;
                     });
                     if (newJsonItems.length > 0) {
                         isJson = true;
                         for (const item of newJsonItems) {
+                            let magnetLink = item.magnetLink || item.magnet || '';
+                            let shareUrl = item.shareUrl || '';
+                            if (magnetLink && (magnetLink.startsWith('https://mypikpak.com/s/') || magnetLink.startsWith('https://mypikpak.com/d/'))) { shareUrl = magnetLink; magnetLink = ''; }
                             clipboardJsonQueue.push({
                                 title: item.title || item.name || '',
-                                magnetLink: item.magnetLink || item.magnet || '',
+                                magnetLink,
                                 size: item.size || '',
-                                imageUrl: item.imageUrl || item.image || ''
+                                imageUrl: item.imageUrl || item.image || '',
+                                shareUrl
                             });
                         }
                         saveClipboardJsonQueue();
