@@ -1940,8 +1940,8 @@ function bindMagnetLinkEvents() {
                         return;
                     }
 
-                    // 查找是否已存在该磁力
-                    const existing = magnets.find(m => m.magnetLink.toLowerCase() === magnetLink.toLowerCase());
+                    // 查找是否已存在
+                    const existing = magnets.find(m => (magnetLink && m.magnetLink && m.magnetLink.toLowerCase() === magnetLink.toLowerCase()) || (shareUrl && m.shareUrl && m.shareUrl.toLowerCase() === shareUrl.toLowerCase()));
 
                     // 离线操作（无论是否更新，都执行离线）
                     if (action === 'offline' || action === 'both') {
