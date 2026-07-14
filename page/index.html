@@ -2333,7 +2333,7 @@ function bindMagnetLinkEvents() {
             const metas = card.magnetLinksMeta || [];
             list.innerHTML = links.map((link, i) => {
                 const meta = metas[i] || {};
-                const thumbSrc = meta.thumb || '';
+                const thumbSrc = meta.customThumb || meta.thumb || '';
                 const title = meta.title || `磁力 #${i + 1}`;
                 const sizeStr = meta.size ? formatSize(meta.size) : '';
                 return `<div class="merged-preview-item" data-index="${i}"><div class="merged-preview-thumb" id="mp-thumb-${i}"${thumbSrc ? ` style="background-image:url(${thumbSrc})"` : ''}>${thumbSrc ? '' : '⏳'}</div><div style="flex:1;min-width:0;"><div style="font-size:0.8rem;font-weight:600;margin-bottom:2px;" id="mp-title-${i}">${escapeHtml(title)}</div><div style="font-size:0.7rem;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(link)}">${escapeHtml(link.substring(0, 55))}${link.length > 55 ? '...' : ''}</div>${sizeStr ? `<div style="font-size:0.7rem;color:var(--text-secondary);">${sizeStr}</div>` : ''}</div><div style="display:flex;gap:4px;flex-shrink:0;"><button class="icon-btn mp-preview" data-index="${i}" title="预览">🔍</button><button class="icon-btn mp-offline" data-index="${i}" title="离线">📥</button><button class="icon-btn mp-copy" data-index="${i}" title="复制">📋</button><button class="icon-btn mp-delete" data-index="${i}" title="删除此链接" style="color:#ef4444;">🗑️</button></div></div>`;
@@ -2377,18 +2377,34 @@ function bindMagnetLinkEvents() {
 
         overlay.innerHTML = `<div class="merged-preview-card"><div class="flex-between"><h3>${escapeHtml(card.title)}</h3><button class="icon-btn" onclick="this.closest('.merged-preview-overlay').remove()">✖</button></div><div style="margin:8px 0;font-size:0.85rem;color:var(--text-secondary);" id="mpLinkCount">共 ${links.length} 条磁力链接</div><div id="mergedPreviewList"></div><div style="display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:12px;padding-top:12px;border-top:1px solid var(--border-color);flex-wrap:wrap;"><div style="position:relative;flex:1;min-width:160px;"><div id="mpFolderSelector" style="cursor:pointer;display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--border-color);border-radius:8px;font-size:0.8rem;"><span id="mpFolderName">📁 ${_offlineSelectedFolderName.replace('📁 ','').replace('📂 ','')}</span><span id="mpFolderArrow" style="margin-left:auto;transition:transform .2s;">▼</span></div><div id="mpFolderDropdown" style="display:none;position:absolute;bottom:100%;left:0;right:0;border:1px solid var(--border-color);border-radius:8px;padding:6px;max-height:260px;overflow-y:auto;background:var(--card-bg);z-index:10;margin-bottom:4px;box-shadow:0 4px 12px rgba(0,0,0,0.15);"></div></div><button id="mpOfflineAll" class="btn btn-primary">📥 离线全部</button><button id="mpCopyAll" class="btn btn-outline">📋 复制全部</button><button class="btn btn-outline" onclick="this.closest('.merged-preview-overlay').remove()">关闭</button></div></div>`;
         document.body.appendChild(overlay);
-        card.magnetLinksMeta = links.map(() => ({}));
+        // 保留已有缓存（含用户自定义封面），只填充空条目
+        if (!card.magnetLinksMeta || card.magnetLinksMeta.length !== links.length) {
+            card.magnetLinksMeta = links.map(() => ({}));
+        }
         renderPreviewList();
 
-        // 懒加载缩略图 + 标题 + 大小
+        // 从 whatslink 数据中提取大小
+        function extractSize(data) {
+            const keys = ['totalSize', 'total_size', 'size', 'length', 'fileSize', 'bytes'];
+            for (const k of keys) {
+                const v = data[k];
+                if (v) { const n = parseInt(v, 10); if (n > 0) return n; }
+            }
+            if (Array.isArray(data.files)) {
+                const sum = data.files.reduce((s, f) => s + (parseInt(f.size || f.length, 10) || 0), 0);
+                if (sum > 0) return sum;
+            }
+            return 0;
+        }
+
+        // 懒加载缩略图 + 标题 + 大小（仅未加载的）
         links.forEach((link, idx) => {
+            if (card.magnetLinksMeta[idx].screenshots?.length) return;
             magnetPreviewWithFallback(link).then(data => {
                 const name = data.name || '';
                 const shots = collectShots(data);
-                const shotIdx = Math.min(idx, shots.length - 1);
-                const src = shots[shotIdx]?.src || shots[0]?.src || '';
-                let fileSize = parseInt(data.size, 10) || 0;
-                if (!fileSize && Array.isArray(data.files)) fileSize = data.files.reduce((s, f) => s + (parseInt(f.size, 10) || 0), 0);
+                const src = shots[0]?.src || '';
+                const fileSize = extractSize(data);
                 card.magnetLinksMeta[idx] = { link, title: name, thumb: src, screenshots: shots.map(s => s.src), size: fileSize };
                 const thumb = document.getElementById('mp-thumb-' + idx);
                 if (thumb && src) { thumb.style.backgroundImage = `url(${src})`; thumb.textContent = ''; }
@@ -2421,7 +2437,7 @@ function bindMagnetLinkEvents() {
                     btn.addEventListener('click', () => {
                         const i = parseInt(btn.getAttribute('data-idx'));
                         const src = btn.getAttribute('data-src');
-                        card.magnetLinksMeta[i].thumb = src;
+                        card.magnetLinksMeta[i].customThumb = src;
                         const thumb = document.getElementById('mp-thumb-' + i);
                         if (thumb) { thumb.style.backgroundImage = `url(${src})`; thumb.textContent = ''; }
                         picker.remove();
