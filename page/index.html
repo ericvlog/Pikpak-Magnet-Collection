@@ -895,7 +895,7 @@
     </div>
 </div>
 <button id="floatHideImageBtn" class="float-hide-btn" title="隐藏/显示图片"><i class="fas fa-image"></i><i class="fas fa-eye-slash"></i><span>隐藏<br>图片</span></button>
-<div class="floating-controls"><div id="floatingBatchBar" class="batch-bar"><span id="selectedCount">已选择 0 个卡片</span><div class="batch-actions"><button id="batchAddTagsBtn" class="btn btn-primary">🏷️ 批量添加标签</button><button id="batchCopyLinksBtn" class="btn btn-success">🔗 批量复制链接</button><button id="batchSaveImagesBtn" class="btn btn-primary" style="background:#0f3b3f;">💾 批量存本地</button><button id="batchDeleteBtn" class="btn btn-danger">🗑️ 批量删除</button><button id="batchReFetchBtn" class="btn btn-warning" style="background:#8b5e3c;color:#fff;">🔄 重新获取</button><button id="selectAllCurrentBtn" class="btn btn-outline">✔️ 全选当前视图</button><button id="selectAllFilteredBtn" class="btn btn-outline">⭐ 全选全部筛选结果</button><button id="batchOfflineBtn" class="btn btn-primary" style="background:#0f3b3f;">📥 批量离线</button><button id="batchRefreshMetaBtn" class="btn btn-warning" style="background:#8b5e3c;color:#fff;">🔄 更新元数据</button><button id="batchMergeBtn" class="btn btn-primary" style="background:#7c3aed;">🔗 合并</button><button id="cancelSelectionBtn" class="btn btn-outline">❌ 取消选择</button></div></div></div>
+<div class="floating-controls"><div id="floatingBatchBar" class="batch-bar"><span id="selectedCount">已选择 0 个卡片</span><div class="batch-actions"><button id="batchAddTagsBtn" class="btn btn-primary">🏷️ 批量添加标签</button><button id="batchCopyLinksBtn" class="btn btn-success">🔗 批量复制链接</button><button id="batchSaveImagesBtn" class="btn btn-primary" style="background:#0f3b3f;">💾 批量存本地</button><button id="batchDeleteBtn" class="btn btn-danger">🗑️ 批量删除</button><button id="batchReFetchBtn" class="btn btn-warning" style="background:#8b5e3c;color:#fff;">🔄 重新获取</button><button id="selectAllCurrentBtn" class="btn btn-outline">✔️ 全选当前视图</button><button id="selectAllFilteredBtn" class="btn btn-outline">⭐ 全选全部筛选结果</button><button id="batchOfflineBtn" class="btn btn-primary" style="background:#0f3b3f;">📥 批量离线</button><button id="batchRefreshMetaBtn" class="btn btn-warning" style="background:#8b5e3c;color:#fff;">🔄 更新元数据</button><button id="batchMergeBtn" class="btn btn-primary" style="background:#7c3aed;">🔗 合并</button><button id="batchShareSaveBtn" class="btn btn-success" style="background:#0891b2;">📤 批量转存共享</button><button id="cancelSelectionBtn" class="btn btn-outline">❌ 取消选择</button></div></div></div>
 
 <!-- ===== 所有模态框 ===== -->
 <div id="batchCopyModal" class="modal"><div class="modal-card"><div class="flex-between"><h3>📋 批量磁力链接</h3><button id="closeBatchCopyModalBtn" class="icon-btn">✖</button></div><div style="padding:1rem;"><div id="batchLinksContainer" class="batch-links-container"></div><div style="display:flex;justify-content:flex-end;gap:12px;margin-top:1rem;"><button id="copyAllBatchLinksBtn" class="btn btn-primary">📋 复制全部</button><button id="cancelBatchCopyBtn" class="btn btn-outline">关闭</button></div></div></div></div>
@@ -5000,6 +5000,55 @@ const magnetLinkEl = m.magnetLink ? `<a href="${escapeHtml(m.magnetLink)}" class
         document.getElementById('offlineFolderModal').style.display = 'flex';
     }
 
+    async function batchShareSaveToPikPak() {
+        if (selectedCardIds.size === 0) { showToast('请先选择卡片', true); return; }
+        const cards = Array.from(selectedCardIds).map(id => magnets.find(m => m.id === id)).filter(Boolean);
+        const shareCards = cards.filter(m => m.shareUrl);
+        if (shareCards.length === 0) { showToast('选中的卡片中没有共享目录卡片', true); return; }
+        // 复用现有的转存文件夹选择器模态框
+        showToast(`正在获取 ${shareCards.length} 个共享信息...`);
+        const infos = [];
+        for (const card of shareCards) {
+            try {
+                const result = await getPikpakShareInfoViaBridge(card.shareUrl);
+                infos.push({ card, shareId: result.shareId, passCodeToken: result.passCodeToken, files: result.files });
+            } catch (e) {
+                console.warn('获取共享信息失败:', card.title, e.message);
+            }
+        }
+        if (infos.length === 0) { showToast('❌ 无法获取任何共享信息', true); return; }
+        // 弹出文件夹选择（复用已有逻辑变量）
+        shareSaveParentId = '';
+        shareSaveFolderName = '📁 默认文件夹';
+        shareFolderPath = [];
+        document.getElementById('shareFolderName').textContent = shareSaveFolderName;
+        document.getElementById('shareFolderDropdown').style.display = 'none';
+        document.getElementById('shareSaveModal').style.display = 'flex';
+        // 覆盖开始转存按钮
+        document.getElementById('startShareSaveBtn').onclick = async () => {
+            const btn = document.getElementById('startShareSaveBtn');
+            btn.disabled = true;
+            btn.textContent = '转存中...';
+            document.getElementById('shareSaveModal').style.display = 'none';
+            let ok = 0, fail = 0;
+            for (const info of infos) {
+                try {
+                    const fileIds = info.files.map(f => f.id);
+                    const folderNames = info.files.map(f => f.name);
+                    await savePikpakShareFilesViaBridge(info.shareId, info.passCodeToken, fileIds, shareSaveParentId, folderNames);
+                    ok++;
+                } catch (e) {
+                    console.warn('[批量转存] 失败:', info.card.title, e.message);
+                    fail++;
+                }
+            }
+            showToast(`✅ 批量转存完成: ${ok} 成功${fail > 0 ? `, ${fail} 失败` : ''}`);
+            btn.disabled = false;
+            btn.textContent = '📥 开始转存';
+            if (selectionMode && typeof toggleSelectionMode === 'function') toggleSelectionMode();
+        };
+    }
+
     // ===== 主事件绑定（所有按钮） =====
     function bindButtons() {
         document.getElementById('menuAddMagnet').onclick = openBatchAddModal;
@@ -5062,6 +5111,7 @@ const magnetLinkEl = m.magnetLink ? `<a href="${escapeHtml(m.magnetLink)}" class
         document.getElementById('batchOfflineBtn').onclick = batchOfflineToPikPak;
         document.getElementById('batchRefreshMetaBtn').onclick = batchRefreshMeta;
         document.getElementById('batchMergeBtn').onclick = batchMergeCards;
+        document.getElementById('batchShareSaveBtn').onclick = batchShareSaveToPikPak;
 
         // 批量离线文件夹选择
         document.getElementById('offlineFolderSelector').addEventListener('click', async () => {
