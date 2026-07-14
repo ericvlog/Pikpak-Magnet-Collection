@@ -2382,6 +2382,18 @@ function bindMagnetLinkEvents() {
             card.magnetLinksMeta = links.map(() => ({}));
         }
         renderPreviewList();
+        // 异步解析本地图片引用 (img_xxx)
+        (async () => {
+            for (let i = 0; i < links.length; i++) {
+                const ref = card.magnetLinksMeta[i]?.customThumb || card.magnetLinksMeta[i]?.thumb || '';
+                if (!ref.startsWith('img_')) continue;
+                const thumb = document.getElementById('mp-thumb-' + i);
+                if (thumb) {
+                    const url = await getImageUrlForCard({ imageUrl: ref });
+                    if (url) thumb.style.backgroundImage = `url(${url})`;
+                }
+            }
+        })();
 
         // 从 whatslink 数据中提取大小
         function extractSize(data) {
@@ -2442,27 +2454,45 @@ function bindMagnetLinkEvents() {
                 picker.onclick = (ev) => { if (ev.target === picker) picker.remove(); };
                 picker.innerHTML = `<div class="screenshot-picker-card"><div class="flex-between"><h4>选择截图 — ${escapeHtml(meta.title || `磁力 #${idx + 1}`)}</h4><button class="icon-btn" onclick="this.closest('.screenshot-picker-overlay').remove()">✖</button></div><div style="display:flex;flex-wrap:wrap;gap:8px;margin:12px 0;justify-content:center;">${meta.screenshots.map(src => `<div class="screenshot-picker-item"><img src="${src}"><div style="display:flex;gap:4px;padding:4px;"><button class="btn btn-sm btn-outline ss-set-link" data-idx="${idx}" data-src="${src}" style="flex:1;font-size:0.7rem;padding:2px 4px;">此链接</button><button class="btn btn-sm btn-outline ss-set-card" data-idx="${idx}" data-src="${src}" style="flex:1;font-size:0.7rem;padding:2px 4px;">主卡片</button></div></div>`).join('')}</div></div>`;
                 document.body.appendChild(picker);
+                async function saveImgLocal(imgUrl) {
+                    try {
+                        let blob;
+                        if (window.__MAGNET_HELPER_EXTENSION__) {
+                            try { blob = await fetchImageViaExtension(imgUrl); } catch (e) { /* fall through */ }
+                        }
+                        if (!blob) {
+                            const r = await fetch(imgUrl, { mode: 'cors', referrerPolicy: 'unsafe-url' });
+                            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                            blob = await r.blob();
+                        }
+                        return await storeImageBlob(imgUrl, blob);
+                    } catch (e) { return imgUrl; }
+                }
                 picker.querySelectorAll('.ss-set-link').forEach(btn => {
-                    btn.addEventListener('click', () => {
+                    btn.addEventListener('click', async () => {
                         const i = parseInt(btn.getAttribute('data-idx'));
                         const src = btn.getAttribute('data-src');
-                        card.magnetLinksMeta[i].customThumb = src;
+                        const localId = await saveImgLocal(src);
+                        card.magnetLinksMeta[i].customThumb = localId;
                         const thumb = document.getElementById('mp-thumb-' + i);
-                        if (thumb) { thumb.style.backgroundImage = `url(${src})`; thumb.textContent = ''; }
+                        const bg = localId.startsWith('img_') ? `url('${localId}')` : `url(${src})`;
+                        if (thumb) { thumb.style.backgroundImage = bg; thumb.textContent = ''; }
                         picker.remove();
                         saveToDB().catch(() => {});
                         showToast('已设为该链接封面');
                     });
                 });
                 picker.querySelectorAll('.ss-set-card').forEach(btn => {
-                    btn.addEventListener('click', () => {
+                    btn.addEventListener('click', async () => {
                         const src = btn.getAttribute('data-src');
-                        card.imageUrl = src;
+                        const localId = await saveImgLocal(src);
+                        card.imageUrl = localId;
                         picker.remove();
                         const cardEl = document.querySelector(`.magnet-card[data-id="${card.id}"]`);
                         if (cardEl) {
                             const img = cardEl.querySelector('.preview-img');
-                            if (img) img.style.backgroundImage = `url('${src}')`;
+                            const bg = localId.startsWith('img_') ? `url('${localId}')` : `url(${src})`;
+                            if (img) img.style.backgroundImage = bg;
                         }
                         saveToDB().catch(() => {});
                         showToast('已设为主卡片封面');
