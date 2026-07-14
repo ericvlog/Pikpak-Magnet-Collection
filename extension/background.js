@@ -305,9 +305,10 @@ function startTokenRefreshScheduler() {
 startTokenRefreshScheduler();
 
 chrome.storage.onChanged.addListener((changes, namespace) => {
-    if (namespace === 'local' && changes.pikpakToken) {
+    if (namespace === 'local' && (changes.pikpakToken || changes.pikpakRefreshToken)) {
         chrome.storage.local.set({ tokenValid: true });
-        console.log('[自动刷新] Token 已更新，标记有效');
+        _ppBgTokenCache = null;
+        console.log('[自动刷新] Token 已更新，清除缓存');
     }
 });
 
