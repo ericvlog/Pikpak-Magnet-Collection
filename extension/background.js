@@ -1856,19 +1856,30 @@ async function ppMoveRestoredFileBg(fileId, targetParentId, folderName, taskId) 
     let actualFileId = '';
     if (taskId) {
         console.log('[扩展] 开始轮询任务:', taskId);
+        let unknownFormatCount = 0;
         for (let i = 0; i < 30; i++) {
             await new Promise(r => setTimeout(r, 2000));
             try {
                 const resp = await ppApiFetchBg(`https://api-drive.mypikpak.com/drive/v1/tasks/${encodeURIComponent(taskId)}`);
                 if (!resp.ok) { console.log('[扩展] 任务响应非OK:', resp.status); continue; }
                 const t = await resp.json();
-                console.log('[扩展] 任务状态:', t.status, t.file_id || t.result?.file_id || '');
-                if (t.status === 'complete' || t.status === 'success') {
+                console.log('[扩展] 任务响应字段:', Object.keys(t).join(','));
+                console.log('[扩展] 任务响应(前300):', JSON.stringify(t).slice(0, 300));
+                const status = t.status || t.phase || t.state || '';
+                if (!status) {
+                    unknownFormatCount++;
+                    if (unknownFormatCount >= 5) {
+                        console.log('[扩展] 任务格式无法识别，跳过轮询');
+                        break;
+                    }
+                    continue;
+                }
+                if (status === 'complete' || status === 'success') {
                     actualFileId = t.result?.file_id || t.file_id || '';
                     console.log('[扩展] 任务完成, actualFileId:', actualFileId);
                     break;
                 }
-                if (t.status === 'failed') { console.warn('[扩展] 恢复任务失败'); break; }
+                if (status === 'failed') { console.warn('[扩展] 恢复任务失败'); break; }
             } catch (e) { console.log('[扩展] 任务轮询异常:', e.message); }
         }
     } else {
