@@ -2752,14 +2752,25 @@ function bindMagnetLinkEvents() {
         } else {
             const allLinks = [];
             const allImages = [];
+            const allMetas = [];
             for (const c of cards) {
-                if (c.magnetLinks && c.magnetLinks.length) allLinks.push(...c.magnetLinks);
-                else if (c.magnetLink) allLinks.push(c.magnetLink);
+                const srcLinks = c.magnetLinks && c.magnetLinks.length ? c.magnetLinks : (c.magnetLink ? [c.magnetLink] : []);
+                const srcMetas = c.magnetLinksMeta && c.magnetLinksMeta.length ? c.magnetLinksMeta : srcLinks.map(() => ({}));
+                for (let mi = 0; mi < srcLinks.length; mi++) {
+                    allLinks.push(srcLinks[mi]);
+                    const meta = srcMetas[mi] || {};
+                    // 未设自定义封面时，用卡片原图作为该链接默认封面
+                    if (!meta.customThumb && !meta.thumb && c.imageUrl) meta.thumb = c.imageUrl;
+                    if (!meta.title && c.title) meta.title = c.title;
+                    if (!meta.size && c.size) meta.size = c.size;
+                    allMetas.push(meta);
+                }
                 if (c.imageUrl) allImages.push(c.imageUrl);
                 if (c.extraImages) allImages.push(...c.extraImages);
             }
             first.magnetLinks = allLinks;
             first.magnetLink = allLinks[0];
+            first.magnetLinksMeta = allMetas;
             first.extraImages = allImages.filter(url => url !== first.imageUrl);
         }
         magnets = magnets.filter(m => !idsToRemove.includes(m.id));
