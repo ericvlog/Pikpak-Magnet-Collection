@@ -3634,6 +3634,9 @@ function loginGDrive() {
             backEl.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 shareFolderPath.pop();
+                shareSaveParentId = shareFolderPath.length > 0 ? shareFolderPath[shareFolderPath.length - 1].id : '';
+                shareSaveFolderName = shareFolderPath.length > 0 ? '📁 ' + shareFolderPath.map(p => p.name).join(' / ') : '📁 默认文件夹（根目录）';
+                document.getElementById('shareFolderName').textContent = shareSaveFolderName;
                 await reloadShareFolderDropdown();
             });
         }
