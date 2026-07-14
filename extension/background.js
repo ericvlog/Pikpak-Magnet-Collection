@@ -1905,10 +1905,12 @@ async function ppMoveRestoredFileBg(fileId, targetParentId, folderName, taskId) 
                 if (!resp.ok) continue;
                 const data = await resp.json();
                 console.log('[扩展] 根目录文件数:', (data.files || []).length);
+                const allNames = (data.files || []).map(f => f.kind + ':' + f.name + (f.trashed ? '(trashed)' : ''));
+                console.log('[扩展] 根目录所有文件:', JSON.stringify(allNames));
                 const matches = (data.files || []).filter(f =>
                     f.kind === 'drive#folder' && !f.trashed && f.name === folderName
                 );
-                console.log('[扩展] 匹配的文件夹:', matches.length, matches.map(m => m.id + ' ' + m.name + ' ' + (m.created_time || '')));
+                console.log('[扩展] 匹配的文件夹:', matches.length);
                 const match = matches.sort((a, b) => new Date(b.created_time || 0) - new Date(a.created_time || 0))[0];
                 if (match) {
                     console.log('[扩展] 尝试移动文件夹:', match.id, match.name);
