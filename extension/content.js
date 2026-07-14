@@ -101,10 +101,12 @@ window.addEventListener('message', (event) => {
     // --- 磁力预览请求 ---
     if (event.data.type === 'REQUEST_MAGNET_PREVIEW') {
         const magnet = event.data.magnet;
-        console.log('[Content] 请求磁力预览:', magnet);
+        const requestId = event.data.requestId || '';
+        console.log('[Content] 请求磁力预览:', magnet, 'requestId:', requestId);
         sendMessageToBackground({ action: 'magnetPreview', magnet: magnet }, (response) => {
             window.postMessage({
                 type: 'MAGNET_PREVIEW_RESULT',
+                requestId: requestId,
                 success: response?.success || false,
                 data: response?.data,
                 error: response?.error
