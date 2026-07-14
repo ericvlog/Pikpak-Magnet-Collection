@@ -2334,12 +2334,10 @@ function bindMagnetLinkEvents() {
             return `<div class="merged-preview-item" data-index="${i}"><div class="merged-preview-thumb" id="mp-thumb-${i}"${thumbSrc ? ` style="background-image:url(${thumbSrc})"` : ''}>${thumbSrc ? '' : '⏳'}</div><div style="flex:1;min-width:0;"><div style="font-size:0.8rem;font-weight:600;margin-bottom:2px;" id="mp-title-${i}">${escapeHtml(title)}</div><div style="font-size:0.7rem;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(link)}">${escapeHtml(link.substring(0, 70))}${link.length > 70 ? '...' : ''}</div></div><div style="display:flex;gap:4px;flex-shrink:0;"><button class="icon-btn mp-preview" data-index="${i}" title="预览">🔍</button><button class="icon-btn mp-offline" data-index="${i}" title="离线">📥</button><button class="icon-btn mp-copy" data-index="${i}" title="复制">📋</button></div></div>`;
         }).join('')}</div><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;padding-top:12px;border-top:1px solid var(--border-color);"><button id="mpCopyAll" class="btn btn-outline">📋 复制全部</button><button class="btn btn-outline" onclick="this.closest('.merged-preview-overlay').remove()">关闭</button></div></div>`;
         document.body.appendChild(overlay);
-        // 强制建立 card.magnetLinksMeta 数组
-        if (!card.magnetLinksMeta) card.magnetLinksMeta = [];
-        for (let i = card.magnetLinksMeta.length; i < links.length; i++) card.magnetLinksMeta[i] = {};
-        // 懒加载缩略图 + 标题（未缓存的）
+        // 清空重建 meta，避免旧缓存（之前竞态写入的错误数据）
+        card.magnetLinksMeta = links.map(() => ({}));
+        // 懒加载缩略图 + 标题
         links.forEach((link, idx) => {
-            if (card.magnetLinksMeta[idx].thumb) return;
             magnetPreviewWithFallback(link).then(data => {
                 const name = data.name || '';
                 const shots = collectShots(data);
