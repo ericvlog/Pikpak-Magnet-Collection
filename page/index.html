@@ -2326,25 +2326,60 @@ function bindMagnetLinkEvents() {
         overlay.className = 'merged-preview-overlay';
         overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
         const links = card.magnetLinks || [card.magnetLink].filter(Boolean);
-        const metas = card.magnetLinksMeta || [];
-        overlay.innerHTML = `<div class="merged-preview-card"><div class="flex-between"><h3>${escapeHtml(card.title)}</h3><button class="icon-btn" onclick="this.closest('.merged-preview-overlay').remove()">✖</button></div><div style="margin:8px 0;font-size:0.85rem;color:var(--text-secondary);">共 ${links.length} 条磁力链接</div><div id="mergedPreviewList">${links.map((link, i) => {
-            const meta = metas[i] || {};
-            const thumbSrc = meta.thumb || '';
-            const title = meta.title || `磁力 #${i + 1}`;
-            return `<div class="merged-preview-item" data-index="${i}"><div class="merged-preview-thumb" id="mp-thumb-${i}"${thumbSrc ? ` style="background-image:url(${thumbSrc})"` : ''}>${thumbSrc ? '' : '⏳'}</div><div style="flex:1;min-width:0;"><div style="font-size:0.8rem;font-weight:600;margin-bottom:2px;" id="mp-title-${i}">${escapeHtml(title)}</div><div style="font-size:0.7rem;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(link)}">${escapeHtml(link.substring(0, 70))}${link.length > 70 ? '...' : ''}</div></div><div style="display:flex;gap:4px;flex-shrink:0;"><button class="icon-btn mp-preview" data-index="${i}" title="预览">🔍</button><button class="icon-btn mp-offline" data-index="${i}" title="离线">📥</button><button class="icon-btn mp-copy" data-index="${i}" title="复制">📋</button></div></div>`;
-        }).join('')}</div><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;padding-top:12px;border-top:1px solid var(--border-color);"><button id="mpCopyAll" class="btn btn-outline">📋 复制全部</button><button class="btn btn-outline" onclick="this.closest('.merged-preview-overlay').remove()">关闭</button></div></div>`;
+
+        function renderPreviewList() {
+            const list = document.getElementById('mergedPreviewList');
+            if (!list) return;
+            const metas = card.magnetLinksMeta || [];
+            list.innerHTML = links.map((link, i) => {
+                const meta = metas[i] || {};
+                const thumbSrc = meta.thumb || '';
+                const title = meta.title || `磁力 #${i + 1}`;
+                const sizeStr = meta.size ? formatSize(meta.size) : '';
+                return `<div class="merged-preview-item" data-index="${i}"><div class="merged-preview-thumb" id="mp-thumb-${i}"${thumbSrc ? ` style="background-image:url(${thumbSrc})"` : ''}>${thumbSrc ? '' : '⏳'}</div><div style="flex:1;min-width:0;"><div style="font-size:0.8rem;font-weight:600;margin-bottom:2px;" id="mp-title-${i}">${escapeHtml(title)}</div><div style="font-size:0.7rem;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(link)}">${escapeHtml(link.substring(0, 55))}${link.length > 55 ? '...' : ''}</div>${sizeStr ? `<div style="font-size:0.7rem;color:var(--text-secondary);">${sizeStr}</div>` : ''}</div><div style="display:flex;gap:4px;flex-shrink:0;"><button class="icon-btn mp-preview" data-index="${i}" title="预览">🔍</button><button class="icon-btn mp-offline" data-index="${i}" title="离线">📥</button><button class="icon-btn mp-copy" data-index="${i}" title="复制">📋</button><button class="icon-btn mp-delete" data-index="${i}" title="删除此链接" style="color:#ef4444;">🗑️</button></div></div>`;
+            }).join('');
+            list.querySelectorAll('.mp-preview').forEach(el => {
+                el.addEventListener('click', (e) => { e.stopPropagation(); const idx = parseInt(el.getAttribute('data-index')); showCardPreview(links[idx], card.magnetLinksMeta[idx]?.title || card.title); });
+            });
+            list.querySelectorAll('.mp-offline').forEach(el => {
+                el.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    try { await sendToPikPakViaBridge(links[parseInt(el.getAttribute('data-index'))]); showToast('✅ 已发送到 PikPak'); } catch (err) { showToast('❌ '+err.message, true); }
+                });
+            });
+            list.querySelectorAll('.mp-copy').forEach(el => {
+                el.addEventListener('click', (e) => { e.stopPropagation(); navigator.clipboard.writeText(links[parseInt(el.getAttribute('data-index'))]).then(() => showToast('已复制')).catch(() => alert('复制失败')); });
+            });
+            list.querySelectorAll('.mp-delete').forEach(el => {
+                el.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const idx = parseInt(el.getAttribute('data-index'));
+                    if (!confirm(`确定删除「${escapeHtml(card.magnetLinksMeta[idx]?.title || `磁力 #${idx + 1}`)}」？`)) return;
+                    links.splice(idx, 1);
+                    if (card.magnetLinksMeta) card.magnetLinksMeta.splice(idx, 1);
+                    if (links.length === 0) { overlay.remove(); showToast('所有链接已删除', false); return; }
+                    card.magnetLinks = links;
+                    card.magnetLink = links[0];
+                    renderPreviewList();
+                    document.getElementById('mpLinkCount').textContent = `共 ${links.length} 条磁力链接`;
+                    saveToDB().catch(() => {});
+                });
+            });
+        }
+
+        overlay.innerHTML = `<div class="merged-preview-card"><div class="flex-between"><h3>${escapeHtml(card.title)}</h3><button class="icon-btn" onclick="this.closest('.merged-preview-overlay').remove()">✖</button></div><div style="margin:8px 0;font-size:0.85rem;color:var(--text-secondary);" id="mpLinkCount">共 ${links.length} 条磁力链接</div><div id="mergedPreviewList"></div><div style="display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:12px;padding-top:12px;border-top:1px solid var(--border-color);flex-wrap:wrap;"><div style="position:relative;flex:1;min-width:160px;"><div id="mpFolderSelector" style="cursor:pointer;display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--border-color);border-radius:8px;font-size:0.8rem;"><span id="mpFolderName">📁 ${_offlineSelectedFolderName.replace('📁 ','').replace('📂 ','')}</span><span id="mpFolderArrow" style="margin-left:auto;transition:transform .2s;">▼</span></div><div id="mpFolderDropdown" style="display:none;position:absolute;bottom:100%;left:0;right:0;border:1px solid var(--border-color);border-radius:8px;padding:6px;max-height:260px;overflow-y:auto;background:var(--card-bg);z-index:10;margin-bottom:4px;box-shadow:0 4px 12px rgba(0,0,0,0.15);"></div></div><button id="mpOfflineAll" class="btn btn-primary">📥 离线全部</button><button id="mpCopyAll" class="btn btn-outline">📋 复制全部</button><button class="btn btn-outline" onclick="this.closest('.merged-preview-overlay').remove()">关闭</button></div></div>`;
         document.body.appendChild(overlay);
-        // 清空重建 meta，避免旧缓存（之前竞态写入的错误数据）
         card.magnetLinksMeta = links.map(() => ({}));
-        // 懒加载缩略图 + 标题
+        renderPreviewList();
+
+        // 懒加载缩略图 + 标题 + 大小
         links.forEach((link, idx) => {
             magnetPreviewWithFallback(link).then(data => {
                 const name = data.name || '';
                 const shots = collectShots(data);
-                // 不同链接用不同的截图索引，避免第1张（封面）全部相同
                 const shotIdx = Math.min(idx, shots.length - 1);
                 const src = shots[shotIdx]?.src || shots[0]?.src || '';
-                card.magnetLinksMeta[idx] = { link, title: name, thumb: src, screenshots: shots.map(s => s.src) };
+                card.magnetLinksMeta[idx] = { link, title: name, thumb: src, screenshots: shots.map(s => s.src), size: data.size || '' };
                 const thumb = document.getElementById('mp-thumb-' + idx);
                 if (thumb && src) { thumb.style.backgroundImage = `url(${src})`; thumb.textContent = ''; }
                 else if (thumb) thumb.textContent = '📁';
@@ -2356,22 +2391,7 @@ function bindMagnetLinkEvents() {
                 if (!card.magnetLinksMeta[idx].title) card.magnetLinksMeta[idx].title = `磁力 #${idx + 1}`;
             });
         });
-        // 事件绑定
-        overlay.querySelectorAll('.mp-preview').forEach(el => {
-            el.addEventListener('click', (e) => { e.stopPropagation(); const idx = parseInt(el.getAttribute('data-index')); showCardPreview(links[idx], card.magnetLinksMeta[idx]?.title || card.title); });
-        });
-        overlay.querySelectorAll('.mp-offline').forEach(el => {
-            el.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                try { await sendToPikPakViaBridge(links[parseInt(el.getAttribute('data-index'))]); showToast('✅ 已发送到 PikPak'); } catch (err) { showToast('❌ '+err.message, true); }
-            });
-        });
-        overlay.querySelectorAll('.mp-copy').forEach(el => {
-            el.addEventListener('click', (e) => { e.stopPropagation(); navigator.clipboard.writeText(links[parseInt(el.getAttribute('data-index'))]).then(() => showToast('已复制')).catch(() => alert('复制失败')); });
-        });
-        document.getElementById('mpCopyAll').addEventListener('click', () => {
-            navigator.clipboard.writeText(links.join('\n')).then(() => showToast('已复制全部磁力链接')).catch(() => alert('复制失败'));
-        });
+
         // 点击缩略图切换封面
         overlay.querySelectorAll('.merged-preview-thumb').forEach(el => {
             el.addEventListener('click', (e) => {
@@ -2412,6 +2432,101 @@ function bindMagnetLinkEvents() {
                     });
                 });
             });
+        });
+
+        // 文件夹选择
+        const mpFolderSelector = document.getElementById('mpFolderSelector');
+        const mpFolderDropdown = document.getElementById('mpFolderDropdown');
+        const mpFolderArrow = document.getElementById('mpFolderArrow');
+        let folderLoaded = false;
+
+        async function loadMpFolderLevel() {
+            mpFolderDropdown.innerHTML = '<div style="padding:6px;color:#64748b;font-size:0.75rem;">加载中...</div>';
+            try {
+                const parentId = _offlineFolderPath.length > 0 ? _offlineFolderPath[_offlineFolderPath.length - 1].id : '';
+                const folders = await ppLoadFolderChildren(parentId);
+                let html = '';
+                if (_offlineFolderPath.length > 0) {
+                    html += '<div class="mp-folder-back" style="padding:5px 8px;cursor:pointer;border-radius:6px;font-size:0.75rem;">← 返回上级</div>';
+                }
+                for (const f of folders) {
+                    const active = f.id === _offlineSelectedParentId ? ' style="padding:5px 8px;cursor:pointer;border-radius:6px;background:var(--tag-bg);font-size:0.75rem;"' : ' style="padding:5px 8px;cursor:pointer;border-radius:6px;font-size:0.75rem;"';
+                    html += `<div class="mp-folder-item" data-id="${f.id}" data-name="${escapeHtml(f.name)}"${active}>📁 ${escapeHtml(f.name)}</div>`;
+                }
+                html += '<div class="mp-folder-create" style="padding:5px 8px;cursor:pointer;border-radius:6px;color:var(--text-secondary);font-size:0.75rem;">➕ 新建文件夹</div>';
+                mpFolderDropdown.innerHTML = html;
+
+                mpFolderDropdown.querySelector('.mp-folder-back')?.addEventListener('click', () => {
+                    _offlineFolderPath.pop();
+                    document.getElementById('mpFolderName').textContent = _offlineFolderPath.length > 0 ? _offlineFolderPath.map(p => p.name).join(' / ') : '默认文件夹';
+                    loadMpFolderLevel();
+                });
+                mpFolderDropdown.querySelectorAll('.mp-folder-item').forEach(el => {
+                    el.addEventListener('click', () => {
+                        const id = el.dataset.id;
+                        const name = el.dataset.name;
+                        _offlineFolderPath.push({ id, name });
+                        _offlineSelectedParentId = id;
+                        document.getElementById('mpFolderName').textContent = _offlineFolderPath.map(p => p.name).join(' / ');
+                        loadMpFolderLevel();
+                    });
+                });
+                mpFolderDropdown.querySelector('.mp-folder-create')?.addEventListener('click', async () => {
+                    const name = prompt('请输入新文件夹名称：');
+                    if (!name || !name.trim()) return;
+                    try {
+                        const parentId = _offlineFolderPath.length > 0 ? _offlineFolderPath[_offlineFolderPath.length - 1].id : '';
+                        const result = await ppCreateFolder(name.trim(), parentId);
+                        _offlineSelectedParentId = result.id;
+                        _offlineFolderPath.push({ id: result.id, name: name.trim() });
+                        document.getElementById('mpFolderName').textContent = _offlineFolderPath.map(p => p.name).join(' / ');
+                        await loadMpFolderLevel();
+                    } catch (err) {
+                        alert('创建文件夹失败: ' + err.message);
+                    }
+                });
+            } catch (err) {
+                mpFolderDropdown.innerHTML = '<div style="padding:6px;color:#ef4444;font-size:0.75rem;">加载失败: ' + escapeHtml(err.message) + '</div>';
+            }
+        }
+
+        mpFolderSelector.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const isOpen = mpFolderDropdown.style.display === 'block';
+            if (isOpen) {
+                mpFolderDropdown.style.display = 'none';
+                mpFolderArrow.classList.remove('open');
+            } else {
+                mpFolderDropdown.style.display = 'block';
+                mpFolderArrow.classList.add('open');
+                if (!folderLoaded) { folderLoaded = true; await loadMpFolderLevel(); }
+            }
+        });
+        overlay.addEventListener('click', (e) => {
+            if (mpFolderDropdown.style.display === 'block' && !e.target.closest('#mpFolderSelector') && !e.target.closest('#mpFolderDropdown')) {
+                mpFolderDropdown.style.display = 'none';
+                mpFolderArrow.classList.remove('open');
+            }
+        });
+
+        // 离线全部
+        document.getElementById('mpOfflineAll').addEventListener('click', async () => {
+            const btn = document.getElementById('mpOfflineAll');
+            btn.disabled = true;
+            btn.textContent = '⏳ 离线中...';
+            let ok = 0, fail = 0;
+            const parentId = _offlineSelectedParentId;
+            for (const link of links) {
+                try { await sendToPikPakViaBridge(link, parentId); ok++; } catch (e) { fail++; }
+                await new Promise(r => setTimeout(r, 300));
+            }
+            showToast(`✅ 离线完成: ${ok} 成功${fail > 0 ? `, ${fail} 失败` : ''}`);
+            btn.disabled = false;
+            btn.innerHTML = '📥 离线全部';
+        });
+
+        document.getElementById('mpCopyAll').addEventListener('click', () => {
+            navigator.clipboard.writeText(links.join('\n')).then(() => showToast('已复制全部磁力链接')).catch(() => alert('复制失败'));
         });
     }
 
