@@ -1856,39 +1856,31 @@ async function ppMoveRestoredFileBg(fileId, targetParentId, folderName, taskId) 
     let actualFileId = '';
     if (taskId) {
         console.log('[扩展] 开始轮询任务:', taskId);
-        let unknownFormatCount = 0;
+        let pollCount = 0;
         for (let i = 0; i < 30; i++) {
             await new Promise(r => setTimeout(r, 2000));
             try {
                 const resp = await ppApiFetchBg(`https://api-drive.mypikpak.com/drive/v1/tasks/${encodeURIComponent(taskId)}`);
-                if (!resp.ok) { console.log('[扩展] 任务响应非OK:', resp.status); continue; }
+                if (!resp.ok) { if (++pollCount > 5) break; continue; }
                 const t = await resp.json();
-                console.log('[扩展] 任务响应字段:', Object.keys(t).join(','));
-                console.log('[扩展] 任务响应(前300):', JSON.stringify(t).slice(0, 300));
-                const status = t.status || t.phase || t.state || '';
-                if (!status) {
-                    unknownFormatCount++;
-                    if (unknownFormatCount >= 5) {
-                        console.log('[扩展] 任务格式无法识别，跳过轮询');
-                        break;
-                    }
-                    continue;
-                }
-                if (status === 'complete' || status === 'success') {
+                // 任务已完成：message=Completed 或 phase=completed/done/success
+                const isDone = t.message === 'Completed' || /^(completed|done|success)$/i.test(t.phase || '');
+                if (isDone) {
                     actualFileId = t.result?.file_id || t.file_id || '';
-                    console.log('[扩展] 任务完成, actualFileId:', actualFileId);
+                    console.log('[扩展] 任务完成, actualFileId:', actualFileId || '(空=文件已存在)');
                     break;
                 }
-                if (status === 'failed') { console.warn('[扩展] 恢复任务失败'); break; }
-            } catch (e) { console.log('[扩展] 任务轮询异常:', e.message); }
+                if (/^(failed|error)$/i.test(t.phase || '')) { console.warn('[扩展] 恢复任务失败'); break; }
+                if (++pollCount > 20) { console.log('[扩展] 轮询超时，跳过'); break; }
+            } catch (e) { if (++pollCount > 5) break; }
         }
     } else {
         console.log('[扩展] 无 taskId，等待 5 秒');
         await new Promise(r => setTimeout(r, 5000));
     }
 
-    const moveTargetId = actualFileId || fileId;
-    console.log('[扩展] 移动目标 ID:', moveTargetId);
+    const moveTargetId = actualFileId || (taskId ? '' : fileId);
+    console.log('[扩展] 移动目标 ID:', moveTargetId || '(将按名称搜索)');
     if (moveTargetId) {
         for (let attempt = 0; attempt < 3; attempt++) {
             try {
