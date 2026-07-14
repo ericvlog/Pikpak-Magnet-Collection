@@ -2441,6 +2441,7 @@ function bindMagnetLinkEvents() {
                         const thumb = document.getElementById('mp-thumb-' + i);
                         if (thumb) { thumb.style.backgroundImage = `url(${src})`; thumb.textContent = ''; }
                         picker.remove();
+                        saveToDB().catch(() => {});
                         showToast('已设为该链接封面');
                     });
                 });
@@ -2454,6 +2455,7 @@ function bindMagnetLinkEvents() {
                             const img = cardEl.querySelector('.preview-img');
                             if (img) img.style.backgroundImage = `url('${src}')`;
                         }
+                        saveToDB().catch(() => {});
                         showToast('已设为主卡片封面');
                     });
                 });
