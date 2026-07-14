@@ -1671,7 +1671,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'savePikpakShareFiles') {
         (async () => {
             try {
-                const { shareId, passCodeToken, fileIds, parentId, shareFolderName } = request;
+                const { shareId, passCodeToken, fileIds, parentId, shareFolderNames } = request;
                 if (!shareId || !passCodeToken || !fileIds || fileIds.length === 0) throw new Error('参数不完整');
                 console.log('[扩展] 转存共享文件:', { shareId, passCodeToken: passCodeToken.slice(0, 10) + '...', fileIds: fileIds.length + '个', parentId });
                 const body = { share_id: shareId, pass_code_token: passCodeToken, file_ids: fileIds, to: { parent_id: parentId || '' } };
@@ -1685,7 +1685,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 if (!resp.ok) throw new Error((data.error_description || data.error || '') + ` (HTTP ${resp.status})`);
                 // PikPak 忽略 to.parent_id，转存总是在根目录。如果指定了目标文件夹，转存后移动过去
                 if (parentId && data.file_id) {
-                    await ppMoveRestoredFileBg(data.file_id, parentId, shareFolderName, data.restore_task_id);
+                    const names = Array.isArray(shareFolderNames) ? shareFolderNames : (shareFolderNames ? [shareFolderNames] : []);
+                    await ppMoveRestoredFileBg(data.file_id, parentId, names, data.restore_task_id);
                 }
                 sendResponse({ success: true, data });
             } catch (err) {
@@ -1841,8 +1842,11 @@ async function ppCreateFolderBg(name, parentId = '') {
     return data;
 }
 
-async function ppMoveRestoredFileBg(fileId, targetParentId, folderName, taskId) {
-    console.log('[扩展] 开始移动: fileId=%s, target=%s, folderName=%s, taskId=%s', fileId, targetParentId, folderName, taskId);
+async function ppMoveRestoredFileBg(fileId, targetParentId, folderNames, taskId) {
+    const names = Array.isArray(folderNames) ? folderNames : (folderNames ? [folderNames] : []);
+    console.log('[扩展] 开始移动: fileId=%s, target=%s, names=%s, taskId=%s', fileId, targetParentId, JSON.stringify(names), taskId);
+    if (names.length === 0) { console.log('[扩展] 没有文件名，跳过移动'); return; }
+
     // 等待恢复任务完成（最多 15 秒）
     if (taskId) {
         for (let i = 0; i < 8; i++) {
@@ -1858,31 +1862,36 @@ async function ppMoveRestoredFileBg(fileId, targetParentId, folderName, taskId) 
         await new Promise(r => setTimeout(r, 5000));
     }
 
-    // 用 fileId 作为 parent_id，在 Pack From Shared 内搜索恢复的文件夹
-    if (fileId && folderName) {
-        for (let attempt = 0; attempt < 6; attempt++) {
+    // 用 fileId 作为 parent_id，在 Pack From Shared 内搜索恢复的文件夹/文件
+    if (fileId && names.length > 0) {
+        const pending = new Set(names);
+        for (let attempt = 0; attempt < 8 && pending.size > 0; attempt++) {
             try {
                 const resp = await ppApiFetchBg(`https://api-drive.mypikpak.com/drive/v1/files?page_size=200&parent_id=${encodeURIComponent(fileId)}`);
                 if (!resp.ok) continue;
                 const data = await resp.json();
-                const match = (data.files || []).filter(f => f.kind === 'drive#folder' && !f.trashed && f.name === folderName)
-                    .sort((a, b) => new Date(b.created_time || 0) - new Date(a.created_time || 0))[0];
-                if (match) {
-                    console.log('[扩展] 找到文件夹 %s (id=%s), 调用 batchMove', match.name, match.id);
-                    const moveResp = await ppApiFetchBg('https://api-drive.mypikpak.com/drive/v1/files:batchMove', {
-                        method: 'POST', body: JSON.stringify({ ids: [match.id], to: { parent_id: targetParentId } })
-                    });
-                    if (moveResp.ok) { console.log('[扩展] 移动成功'); return; }
-                    const mText = await moveResp.text();
-                    console.warn('[扩展] batchMove 失败:', moveResp.status, (mText || '').slice(0, 200));
-                    return;
+                for (const name of [...pending]) {
+                    const match = (data.files || []).filter(f => !f.trashed && f.name === name)
+                        .sort((a, b) => new Date(b.created_time || 0) - new Date(a.created_time || 0))[0];
+                    if (match) {
+                        const moveResp = await ppApiFetchBg('https://api-drive.mypikpak.com/drive/v1/files:batchMove', {
+                            method: 'POST', body: JSON.stringify({ ids: [match.id], to: { parent_id: targetParentId } })
+                        });
+                        if (moveResp.ok) {
+                            console.log('[扩展] 移动成功: %s (id=%s)', name, match.id);
+                            pending.delete(name);
+                        } else {
+                            const mText = await moveResp.text();
+                            console.warn('[扩展] 移动 %s 失败: HTTP %d %s', name, moveResp.status, (mText || '').slice(0, 150));
+                            pending.delete(name);
+                        }
+                    }
                 }
             } catch (_) {}
-            await new Promise(r => setTimeout(r, 3000));
+            if (pending.size > 0) await new Promise(r => setTimeout(r, 3000));
         }
-        console.log('[扩展] 在 Pack From Shared 中未找到文件夹 %s', folderName);
+        if (pending.size > 0) console.log('[扩展] %d 个文件未找到或移动失败: %s', pending.size, JSON.stringify([...pending]));
     }
-    console.error('[扩展] 自动移动文件夹失败，请手动移动');
 }
 
 // ===== 工具函数 =====

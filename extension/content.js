@@ -403,8 +403,8 @@ window.addEventListener('message', (event) => {
         });
     }
     if (event.data.type === 'REQUEST_SAVE_PIKPAK_SHARE_FILES') {
-        const { shareId, passCodeToken, fileIds, parentId, shareFolderName } = event.data;
-        sendMessageToBackground({ action: 'savePikpakShareFiles', shareId, passCodeToken, fileIds, parentId, shareFolderName }, (response) => {
+        const { shareId, passCodeToken, fileIds, parentId, shareFolderNames } = event.data;
+        sendMessageToBackground({ action: 'savePikpakShareFiles', shareId, passCodeToken, fileIds, parentId, shareFolderNames }, (response) => {
             window.postMessage({ type: 'SAVE_PIKPAK_SHARE_FILES_RESULT', success: response?.success || false, data: response?.data, error: response?.error || '' }, '*');
         });
     }
