@@ -2338,26 +2338,26 @@ function bindMagnetLinkEvents() {
         if (!card.magnetLinksMeta) card.magnetLinksMeta = [];
         for (let i = card.magnetLinksMeta.length; i < links.length; i++) card.magnetLinksMeta[i] = {};
         // 懒加载缩略图 + 标题（未缓存的）
-        for (let i = 0; i < links.length; i++) {
-            if (card.magnetLinksMeta[i].thumb) continue;
-            ((idx) => {
-                magnetPreviewWithFallback(links[idx]).then(data => {
-                    const name = data.name || '';
-                    const shots = collectShots(data);
-                    const src = shots[0]?.src || '';
-                    card.magnetLinksMeta[idx] = { link: links[idx], title: name, thumb: src, screenshots: shots.map(s => s.src) };
-                    const thumb = document.getElementById('mp-thumb-' + idx);
-                    if (thumb && src) { thumb.style.backgroundImage = `url(${src})`; thumb.textContent = ''; }
-                    else if (thumb) thumb.textContent = '📁';
-                    const titleEl = document.getElementById('mp-title-' + idx);
-                    if (titleEl && name) titleEl.textContent = name;
-                }).catch(() => {
-                    const thumb = document.getElementById('mp-thumb-' + idx);
-                    if (thumb) thumb.textContent = '📁';
-                    if (!card.magnetLinksMeta[idx].title) card.magnetLinksMeta[idx].title = `磁力 #${idx + 1}`;
-                });
-            })(i);
-        }
+        links.forEach((link, idx) => {
+            if (card.magnetLinksMeta[idx].thumb) return;
+            magnetPreviewWithFallback(link).then(data => {
+                const name = data.name || '';
+                const shots = collectShots(data);
+                // 不同链接用不同的截图索引，避免第1张（封面）全部相同
+                const shotIdx = Math.min(idx, shots.length - 1);
+                const src = shots[shotIdx]?.src || shots[0]?.src || '';
+                card.magnetLinksMeta[idx] = { link, title: name, thumb: src, screenshots: shots.map(s => s.src) };
+                const thumb = document.getElementById('mp-thumb-' + idx);
+                if (thumb && src) { thumb.style.backgroundImage = `url(${src})`; thumb.textContent = ''; }
+                else if (thumb) thumb.textContent = '📁';
+                const titleEl = document.getElementById('mp-title-' + idx);
+                if (titleEl && name) titleEl.textContent = name;
+            }).catch(() => {
+                const thumb = document.getElementById('mp-thumb-' + idx);
+                if (thumb) thumb.textContent = '📁';
+                if (!card.magnetLinksMeta[idx].title) card.magnetLinksMeta[idx].title = `磁力 #${idx + 1}`;
+            });
+        });
         // 事件绑定
         overlay.querySelectorAll('.mp-preview').forEach(el => {
             el.addEventListener('click', (e) => { e.stopPropagation(); const idx = parseInt(el.getAttribute('data-index')); showCardPreview(links[idx], card.magnetLinksMeta[idx]?.title || card.title); });
