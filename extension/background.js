@@ -1927,13 +1927,31 @@ async function ppMoveRestoredFileBg(fileId, targetParentId, folderName, taskId) 
                     const match = children.find(f => f.kind === 'drive#folder' && !f.trashed && f.name === folderName);
                     if (match) {
                         console.log('[扩展] 找到文件夹 %s (id=%s) 在 parent=%s', match.name, match.id, parentId || 'root');
+                        // 查看文件当前信息
+                        try {
+                            const infoResp = await ppApiFetchBg(`https://api-drive.mypikpak.com/drive/v1/files/${encodeURIComponent(match.id)}`);
+                            if (infoResp.ok) {
+                                const info = await infoResp.json();
+                                console.log('[扩展] 文件当前 parent_id=%s, kind=%s, user_id=%s', info.parent_id, info.kind, info.user_id);
+                            }
+                        } catch (_) {}
+                        // 尝试 batchMove API（可能比 PATCH 更支持跨区移动）
+                        try {
+                            const batchResp = await ppApiFetchBg('https://api-drive.mypikpak.com/drive/v1/files:batchMove', {
+                                method: 'POST', body: JSON.stringify({ ids: [match.id], to: { parent_id: targetParentId } })
+                            });
+                            if (batchResp.ok) { console.log('[扩展] 移动成功 (batchMove)'); return; }
+                            const bText = await batchResp.text();
+                            console.log('[扩展] batchMove 失败:', batchResp.status, (bText || '').slice(0, 150));
+                        } catch (e) { console.log('[扩展] batchMove 异常:', e.message); }
+                        // 回退到 PATCH
                         const moveResp = await ppApiFetchBg(`https://api-drive.mypikpak.com/drive/v1/files/${encodeURIComponent(match.id)}`, {
                             method: 'PATCH', body: JSON.stringify({ parent_id: targetParentId })
                         });
-                        if (moveResp.ok) { console.log('[扩展] 移动成功'); return; }
+                        if (moveResp.ok) { console.log('[扩展] 移动成功 (PATCH)'); return; }
                         const moveText = await moveResp.text();
                         if (moveResp.status === 400 && moveText.includes('already')) { console.log('[扩展] 文件已在目标目录'); return; }
-                        console.warn(`[扩展] 移动 ${folderName} 失败:`, moveResp.status, (moveText || '').slice(0, 200));
+                        console.warn(`[扩展] 移动 ${folderName} 全部失败:`, moveResp.status, (moveText || '').slice(0, 200));
                         return; // 找到了但移动失败，不再重试
                     }
                 } catch (_) {}
