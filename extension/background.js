@@ -1682,6 +1682,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 let data;
                 try { data = JSON.parse(text); } catch(e) { data = text; }
                 if (!resp.ok) throw new Error((data.error_description || data.error || '') + ` (HTTP ${resp.status})`);
+                // PikPak 忽略 to.parent_id，转存总是在根目录。如果指定了目标文件夹，转存后移动过去
+                if (parentId && data.file_id) {
+                    await ppMoveRestoredFileBg(data.file_id, parentId);
+                }
                 sendResponse({ success: true, data });
             } catch (err) {
                 console.error('[扩展] 转存失败:', err.message);
@@ -1834,6 +1838,28 @@ async function ppCreateFolderBg(name, parentId = '') {
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error_description || `HTTP ${resp.status}`);
     return data;
+}
+
+async function ppMoveRestoredFileBg(fileId, targetParentId) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+            if (attempt > 0) await new Promise(r => setTimeout(r, 2000));
+            const resp = await ppApiFetchBg(`https://api-drive.mypikpak.com/drive/v1/files/${encodeURIComponent(fileId)}`, {
+                method: 'PATCH', body: JSON.stringify({ parent_id: targetParentId })
+            });
+            if (resp.ok) { console.log('[扩展] 移动成功'); return; }
+            const text = await resp.text();
+            const data = JSON.parse(text);
+            // 文件已在该目录则视为成功
+            if (resp.status === 400 && (data.error_description || '').includes('already')) {
+                console.log('[扩展] 文件已在目标目录'); return;
+            }
+            console.warn(`[扩展] 移动失败 (尝试 ${attempt + 1}/3):`, resp.status, (data.error_description || data.error || text).slice(0, 200));
+        } catch (err) {
+            console.warn(`[扩展] 移动异常 (尝试 ${attempt + 1}/3):`, err.message);
+        }
+    }
+    console.error('[扩展] 移动文件到目标文件夹失败，请手动移动');
 }
 
 // ===== 工具函数 =====
