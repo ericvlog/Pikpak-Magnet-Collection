@@ -2344,7 +2344,7 @@ function bindMagnetLinkEvents() {
             list.querySelectorAll('.mp-offline').forEach(el => {
                 el.addEventListener('click', async (e) => {
                     e.stopPropagation();
-                    try { await sendToPikPakViaBridge(links[parseInt(el.getAttribute('data-index'))]); showToast('✅ 已发送到 PikPak'); } catch (err) { showToast('❌ '+err.message, true); }
+                    try { await sendToPikPakViaBridge(links[parseInt(el.getAttribute('data-index'))], _offlineSelectedParentId); showToast('✅ 已发送到 PikPak'); } catch (err) { showToast('❌ '+err.message, true); }
                 });
             });
             list.querySelectorAll('.mp-copy').forEach(el => {
@@ -2525,6 +2525,7 @@ function bindMagnetLinkEvents() {
 
                 mpFolderDropdown.querySelector('.mp-folder-back')?.addEventListener('click', () => {
                     _offlineFolderPath.pop();
+                    _offlineSelectedParentId = _offlineFolderPath.length > 0 ? _offlineFolderPath[_offlineFolderPath.length - 1].id : '';
                     document.getElementById('mpFolderName').textContent = _offlineFolderPath.length > 0 ? _offlineFolderPath.map(p => p.name).join(' / ') : '默认文件夹';
                     loadMpFolderLevel();
                 });
@@ -5265,6 +5266,7 @@ const magnetLinkEl = m.magnetLink ? `<a href="${escapeHtml(m.magnetLink)}" class
 
         dropdown.querySelector('[data-action="back"]')?.addEventListener('click', () => {
             _offlineFolderPath.pop();
+            _offlineSelectedParentId = _offlineFolderPath.length > 0 ? _offlineFolderPath[_offlineFolderPath.length - 1].id : '';
             _offlineRenderSelectedName();
             _offlineLoadAndRenderLevel();
         });
