@@ -112,6 +112,18 @@
         .watch-tag { display: inline-flex; align-items: center; padding: 0 6px; height: 100%; font-size: 0.75rem; font-weight: 700; border-radius: 3px; cursor: pointer; user-select: none; color: #6b7280; background: #e5e7eb; border: 1px solid #d1d5db; transition: all 0.15s; }
         .watch-tag.active-want { color: #92400e; background: #fde68a; border-color: #f59e0b; }
         .watch-tag.active-watched { color: #14532d; background: #86efac; border-color: #22c55e; }
+        .extra-links { margin-top: 6px; border-top: 1px solid var(--border-color); padding-top: 4px; }
+        .toggle-extra-links { font-size: 0.75rem; color: var(--text-secondary); background: none; border: 1px solid var(--border-color); border-radius: 6px; padding: 2px 8px; cursor: pointer; width: 100%; text-align: center; }
+        .toggle-extra-links:hover { background: var(--tag-hover); }
+        .extra-links-list { margin-top: 4px; }
+        .extra-link-item { display: flex; align-items: center; gap: 4px; padding: 3px 6px; font-size: 0.75rem; border-radius: 6px; }
+        .extra-link-item:hover { background: var(--tag-hover); }
+        .extra-link-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); font-family: monospace; font-size: 0.7rem; }
+        .merged-preview-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 1000; display: flex; align-items: center; justify-content: center; }
+        .merged-preview-card { background: var(--card-bg); border-radius: 16px; max-width: 700px; width: 90%; max-height: 85vh; overflow-y: auto; padding: 1rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+        .merged-preview-item { display: flex; align-items: center; gap: 10px; padding: 10px; border-bottom: 1px solid var(--border-color); }
+        .merged-preview-item:last-child { border-bottom: none; }
+        .merged-preview-thumb { width: 100px; height: 56px; border-radius: 8px; background: var(--tag-bg); flex-shrink: 0; background-size: cover; background-position: center; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; color: var(--text-secondary); }
         .magnet-grid { display: grid; gap: 1.5rem; margin-top: 1.5rem; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); position: relative; }
         @media (max-width: 600px) { .magnet-grid { gap: 1rem; } }
         @media (max-width: 480px) { .magnet-grid { gap: 0.8rem; } }
@@ -2309,6 +2321,54 @@ function bindMagnetLinkEvents() {
         });
     }
 
+    // ===== 合并磁力卡片预览 =====
+    function showMergedCardPreview(card) {
+        const overlay = document.createElement('div');
+        overlay.className = 'merged-preview-overlay';
+        overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+        const links = card.magnetLinks || [card.magnetLink].filter(Boolean);
+        overlay.innerHTML = `<div class="merged-preview-card"><div class="flex-between"><h3>${escapeHtml(card.title)}</h3><button class="icon-btn" onclick="this.closest('.merged-preview-overlay').remove()">✖</button></div><div style="margin:8px 0;font-size:0.85rem;color:var(--text-secondary);">共 ${links.length} 条磁力链接</div><div id="mergedPreviewList">${links.map((link, i) => `<div class="merged-preview-item" data-index="${i}"><div class="merged-preview-thumb" id="mp-thumb-${i}">⏳</div><div style="flex:1;min-width:0;"><div style="font-size:0.8rem;font-weight:600;margin-bottom:2px;">磁力 #${i + 1}</div><div style="font-size:0.7rem;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(link)}">${escapeHtml(link.substring(0, 70))}${link.length > 70 ? '...' : ''}</div></div><div style="display:flex;gap:4px;flex-shrink:0;"><button class="icon-btn mp-preview" data-link="${escapeHtml(link)}" data-title="${escapeHtml(card.title)}" title="预览">🔍</button><button class="icon-btn mp-offline" data-link="${escapeHtml(link)}" title="离线">📥</button><button class="icon-btn mp-copy" data-link="${escapeHtml(link)}" title="复制">📋</button></div></div>`).join('')}</div><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;padding-top:12px;border-top:1px solid var(--border-color);"><button id="mpOfflineAll" class="btn btn-primary">📥 全部离线</button><button id="mpCopyAll" class="btn btn-outline">📋 复制全部</button><button class="btn btn-outline" onclick="this.closest('.merged-preview-overlay').remove()">关闭</button></div></div>`;
+        document.body.appendChild(overlay);
+        // 懒加载缩略图
+        for (let i = 0; i < links.length; i++) {
+            magnetPreviewWithFallback(links[i]).then(data => {
+                const shots = collectShots(data);
+                const src = shots[0]?.src || '';
+                const thumb = document.getElementById('mp-thumb-' + i);
+                if (thumb && src) { thumb.style.backgroundImage = `url(${src})`; thumb.textContent = ''; }
+                else if (thumb) thumb.textContent = '📁';
+            }).catch(() => {
+                const thumb = document.getElementById('mp-thumb-' + i);
+                if (thumb) thumb.textContent = '📁';
+            });
+        }
+        // 事件绑定
+        overlay.querySelectorAll('.mp-preview').forEach(el => {
+            el.addEventListener('click', (e) => { e.stopPropagation(); showCardPreview(el.getAttribute('data-link'), el.getAttribute('data-title') || ''); });
+        });
+        overlay.querySelectorAll('.mp-offline').forEach(el => {
+            el.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                try { await sendToPikPakViaBridge(el.getAttribute('data-link')); showToast('✅ 已发送到 PikPak'); } catch (err) { showToast('❌ '+err.message, true); }
+            });
+        });
+        overlay.querySelectorAll('.mp-copy').forEach(el => {
+            el.addEventListener('click', (e) => { e.stopPropagation(); navigator.clipboard.writeText(el.getAttribute('data-link')).then(() => showToast('已复制')).catch(() => alert('复制失败')); });
+        });
+        document.getElementById('mpOfflineAll').addEventListener('click', async () => {
+            let ok = 0, fail = 0;
+            for (const link of links) {
+                try { await sendToPikPakViaBridge(link); ok++; } catch (e) { fail++; }
+                await new Promise(r => setTimeout(r, 300));
+            }
+            showToast(`✅ 全部离线完成: ${ok} 成功${fail > 0 ? `, ${fail} 失败` : ''}`);
+            overlay.remove();
+        });
+        document.getElementById('mpCopyAll').addEventListener('click', () => {
+            navigator.clipboard.writeText(links.join('\n')).then(() => showToast('已复制全部磁力链接')).catch(() => alert('复制失败'));
+        });
+    }
+
     // ===== 截图提取 =====
     function toWhatslinkImageUrl(value) {
         let url = String(value || '').trim();
@@ -2463,12 +2523,16 @@ function bindMagnetLinkEvents() {
             first.extraImages = allImages.filter(url => url !== first.imageUrl);
         } else {
             const allLinks = [];
+            const allImages = [];
             for (const c of cards) {
                 if (c.magnetLinks && c.magnetLinks.length) allLinks.push(...c.magnetLinks);
                 else if (c.magnetLink) allLinks.push(c.magnetLink);
+                if (c.imageUrl) allImages.push(c.imageUrl);
+                if (c.extraImages) allImages.push(...c.extraImages);
             }
             first.magnetLinks = allLinks;
             first.magnetLink = allLinks[0];
+            first.extraImages = allImages.filter(url => url !== first.imageUrl);
         }
         magnets = magnets.filter(m => !idsToRemove.includes(m.id));
         selectedCardIds.clear();
@@ -4607,7 +4671,8 @@ async function renderLoadedCards() {
             const imgUrl = m.imageUrl ? (m.imageUrl.startsWith('img_') ? '' : m.imageUrl) : '';
 const magnetLinkEl = m.magnetLink ? `<a href="${escapeHtml(m.magnetLink)}" class="magnet-link" data-magnet="${escapeHtml(m.magnetLink)}">🔗 ${escapeHtml(shortLink)}</a>` : (m.videoUrl ? `<div class="magnet-link" style="font-size:0.75rem;color:var(--text-secondary);word-break:break-all;">🔗 ${escapeHtml(shortLink)}</div>` : (m.messageUrl ? `<a href="${escapeHtml(m.messageUrl)}" class="magnet-link" target="_blank" rel="noopener noreferrer">📨 ${escapeHtml(shortLink)}</a>` : ''));
             const copyBtn = m.magnetLink ? `<button class="icon-btn copy-magnet" data-magnet="${escapeHtml(m.magnetLink)}" title="复制磁力链接"><i class="fas fa-copy"></i></button>` : '';
-            return `<div class="magnet-card" data-id="${m.id}"><input type="checkbox" class="card-checkbox" data-id="${m.id}" ${checked}><div class="preview-img" style="background-image: url('${escapeHtml(imgUrl || 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'400\' height=\'200\' viewBox=\'0 0 400 200\'%3E%3Crect width=\'400\' height=\'200\' fill=\'%23e2e8f0\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' font-family=\'Arial\' font-size=\'16\' fill=\'%23475569\' text-anchor=\'middle\' dy=\'.3em\'%3ENo Preview%3C/text%3E%3C/svg%3E')}')" data-img-url="${escapeHtml(imgUrl)}"></div><div class="card-content"><div class="card-title">${escapeHtml(m.title)}</div>${badgeRow}<div class="tag-list">${tagSpans}</div>${m.size && !m.shareUrl?`<div><i class="fas fa-database"></i> ${escapeHtml(m.size)}</div>`:''}${magnetLinkEl}<div class="card-actions"><div class="star-rating" data-id="${m.id}">${stars}</div><div class="watch-tags"><span class="watch-tag ${m.wantToWatch?'active-want':''}" data-watch="wantToWatch">想看</span><span class="watch-tag ${m.watched?'active-watched':''}" data-watch="watched">已看</span></div><div>${copyBtn}<button class="icon-btn preview-card-btn" data-id="${m.id}" data-magnet="${escapeHtml(m.magnetLink)}" data-video-url="${escapeHtml(m.videoUrl || '')}" data-file-id="${escapeHtml(m.fileId || '')}" data-file-ids="${escapeHtml(JSON.stringify(m.fileIds || []))}" data-title="${escapeHtml(m.title)}" title="预览"><i class="fas fa-eye"></i> 预览</button><button class="icon-btn edit-magnet" data-id="${m.id}"><i class="fas fa-edit"></i> 编辑</button><button class="icon-btn save-image-btn" data-id="${m.id}" title="保存图片到本地"><i class="fas fa-download"></i> 存本地</button>${m.shareUrl ? `<button class="icon-btn save-share-btn" data-id="${m.id}" title="转存 PikPak 共享目录到你的网盘"><i class="fas fa-cloud-download-alt"></i> 转存</button>` : `<button class="icon-btn send-pikpak-btn" data-id="${m.id}" data-magnet="${escapeHtml(m.magnetLink)}" data-video-url="${escapeHtml(m.videoUrl || '')}" data-file-id="${escapeHtml(m.fileId || '')}" data-file-ids="${escapeHtml(JSON.stringify(m.fileIds || []))}" title="发送到 PikPak 离线下载"><i class="fas fa-cloud-upload-alt"></i> 离线</button>`}${m.messageUrl ? '<button class="icon-btn refresh-meta-btn" data-id="' + m.id + '" title="从 Telegram 重新获取文件元数据"><i class="fas fa-sync-alt"></i> 更新</button>' : ''}<button class="icon-btn delete-magnet" data-id="${m.id}"><i class="fas fa-trash-alt"></i> 删除</button></div></div></div></div>`;
+            const extraLinksHtml = (m.magnetLinks && m.magnetLinks.length > 1) ? `<div class="extra-links"><button class="toggle-extra-links" data-id="${m.id}">📎 展开全部 ${m.magnetLinks.length} 条磁力 ▼</button><div class="extra-links-list" style="display:none;">${m.magnetLinks.slice(1).map((link, idx) => `<div class="extra-link-item"><span class="extra-link-text" title="${escapeHtml(link)}">#${idx+2} ${escapeHtml(link.substring(0, 55))}${link.length > 55 ? '...' : ''}</span><button class="icon-btn extra-link-preview" data-link="${escapeHtml(link)}" data-title="${escapeHtml(m.title)}" title="预览">🔍</button><button class="icon-btn extra-link-offline" data-link="${escapeHtml(link)}" title="离线">📥</button><button class="icon-btn extra-link-copy" data-link="${escapeHtml(link)}" title="复制">📋</button></div>`).join('')}</div></div>` : '';
+            return `<div class="magnet-card" data-id="${m.id}"><input type="checkbox" class="card-checkbox" data-id="${m.id}" ${checked}><div class="preview-img" style="background-image: url('${escapeHtml(imgUrl || 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'400\' height=\'200\' viewBox=\'0 0 400 200\'%3E%3Crect width=\'400\' height=\'200\' fill=\'%23e2e8f0\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' font-family=\'Arial\' font-size=\'16\' fill=\'%23475569\' text-anchor=\'middle\' dy=\'.3em\'%3ENo Preview%3C/text%3E%3C/svg%3E')}')" data-img-url="${escapeHtml(imgUrl)}"></div><div class="card-content"><div class="card-title">${escapeHtml(m.title)}</div>${badgeRow}<div class="tag-list">${tagSpans}</div>${m.size && !m.shareUrl?`<div><i class="fas fa-database"></i> ${escapeHtml(m.size)}</div>`:''}${magnetLinkEl}${extraLinksHtml}<div class="card-actions"><div class="star-rating" data-id="${m.id}">${stars}</div><div class="watch-tags"><span class="watch-tag ${m.wantToWatch?'active-want':''}" data-watch="wantToWatch">想看</span><span class="watch-tag ${m.watched?'active-watched':''}" data-watch="watched">已看</span></div><div>${copyBtn}<button class="icon-btn preview-card-btn" data-id="${m.id}" data-magnet="${escapeHtml(m.magnetLink)}" data-video-url="${escapeHtml(m.videoUrl || '')}" data-file-id="${escapeHtml(m.fileId || '')}" data-file-ids="${escapeHtml(JSON.stringify(m.fileIds || []))}" data-title="${escapeHtml(m.title)}" title="预览"><i class="fas fa-eye"></i> 预览</button><button class="icon-btn edit-magnet" data-id="${m.id}"><i class="fas fa-edit"></i> 编辑</button><button class="icon-btn save-image-btn" data-id="${m.id}" title="保存图片到本地"><i class="fas fa-download"></i> 存本地</button>${m.shareUrl ? `<button class="icon-btn save-share-btn" data-id="${m.id}" title="转存 PikPak 共享目录到你的网盘"><i class="fas fa-cloud-download-alt"></i> 转存</button>` : `<button class="icon-btn send-pikpak-btn" data-id="${m.id}" data-magnet="${escapeHtml(m.magnetLink)}" data-video-url="${escapeHtml(m.videoUrl || '')}" data-file-id="${escapeHtml(m.fileId || '')}" data-file-ids="${escapeHtml(JSON.stringify(m.fileIds || []))}" title="发送到 PikPak 离线下载"><i class="fas fa-cloud-upload-alt"></i> 离线</button>`}${m.messageUrl ? '<button class="icon-btn refresh-meta-btn" data-id="' + m.id + '" title="从 Telegram 重新获取文件元数据"><i class="fas fa-sync-alt"></i> 更新</button>' : ''}<button class="icon-btn delete-magnet" data-id="${m.id}"><i class="fas fa-trash-alt"></i> 删除</button></div></div></div></div>`;
         }).join('');
 
         // 处理本地图片
@@ -4716,10 +4781,18 @@ const magnetLinkEl = m.magnetLink ? `<a href="${escapeHtml(m.magnetLink)}" class
                 const videoUrl = btn.getAttribute('data-video-url');
                 const url = videoUrl || magnet;
                 if (url) {
-                    try {
-                        await sendToPikPakViaBridge(url);
-                        showToast('✅ 已发送到 PikPak，任务创建成功！');
-                    } catch (err) { showToast('❌ '+err.message, true); }
+                    const card = magnets.find(m => m.id === id);
+                    if (card && card.magnetLinks && card.magnetLinks.length > 1) {
+                        try {
+                            await offlineCard(card);
+                            showToast('✅ 已发送全部磁力到 PikPak');
+                        } catch (err) { showToast('❌ '+err.message, true); }
+                    } else {
+                        try {
+                            await sendToPikPakViaBridge(url);
+                            showToast('✅ 已发送到 PikPak，任务创建成功！');
+                        } catch (err) { showToast('❌ '+err.message, true); }
+                    }
                 } else {
                     const card = magnets.find(m => m.id === id);
                     if (card) {
@@ -4784,11 +4857,52 @@ const magnetLinkEl = m.magnetLink ? `<a href="${escapeHtml(m.magnetLink)}" class
                 const id = parseInt(btn.getAttribute('data-id'));
                 const title = btn.getAttribute('data-title') || '未知资源';
                 if (magnet) {
-                    showCardPreview(magnet, title);
+                    const card = magnets.find(m => m.id === id);
+                    if (card && card.magnetLinks && card.magnetLinks.length > 1) {
+                        showMergedCardPreview(card);
+                    } else {
+                        showCardPreview(magnet, title);
+                    }
                 } else {
                     const card = magnets.find(m => m.id === id);
                     if (card) showVideoPreview(card);
                 }
+            });
+        });
+        // 合并磁力卡片：展开/收起额外链接
+        document.querySelectorAll('.toggle-extra-links').forEach(el => {
+            el.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const list = el.nextElementSibling;
+                if (list) {
+                    const isHidden = list.style.display === 'none';
+                    list.style.display = isHidden ? 'block' : 'none';
+                    el.textContent = isHidden ? `📎 收起全部 ${el.dataset.count || ''}▼`.replace('▼', '▲') : el.textContent.replace('▲', '▼');
+                }
+            });
+        });
+        // 合并磁力卡片：预览单个链接
+        document.querySelectorAll('.extra-link-preview').forEach(el => {
+            el.addEventListener('click', (e) => {
+                e.stopPropagation();
+                showCardPreview(el.getAttribute('data-link'), el.getAttribute('data-title') || '');
+            });
+        });
+        // 合并磁力卡片：离线单个链接
+        document.querySelectorAll('.extra-link-offline').forEach(el => {
+            el.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                try {
+                    await sendToPikPakViaBridge(el.getAttribute('data-link'));
+                    showToast('✅ 已发送到 PikPak');
+                } catch (err) { showToast('❌ '+err.message, true); }
+            });
+        });
+        // 合并磁力卡片：复制单个链接
+        document.querySelectorAll('.extra-link-copy').forEach(el => {
+            el.addEventListener('click', (e) => {
+                e.stopPropagation();
+                navigator.clipboard.writeText(el.getAttribute('data-link')).then(() => showToast('已复制磁力链接')).catch(() => alert('复制失败'));
             });
         });
 
@@ -4873,7 +4987,10 @@ const magnetLinkEl = m.magnetLink ? `<a href="${escapeHtml(m.magnetLink)}" class
         const magnetLinks = [];
         for (const fail of failList) {
             const magnet = magnets.find(m => m.id === fail.cardId);
-            if (magnet && magnet.magnetLink) magnetLinks.push(magnet.magnetLink);
+            if (magnet) {
+                const links = magnet.magnetLinks || (magnet.magnetLink ? [magnet.magnetLink] : []);
+                magnetLinks.push(...links);
+            }
         }
         if (magnetLinks.length === 0) { showToast('未找到任何有效的磁力链接', true); return; }
         navigator.clipboard.writeText(magnetLinks.join('\n')).then(() => showToast(`已复制 ${magnetLinks.length} 个磁力链接`)).catch(() => showToast('复制失败', true));
@@ -5153,9 +5270,15 @@ const magnetLinkEl = m.magnetLink ? `<a href="${escapeHtml(m.magnetLink)}" class
                 const m = magnets.find(m => m.id === ids[i]);
                 if (!m) { failed++; continue; }
                 try {
-                    if (m.magnetLink) {
-                        await sendToPikPakViaBridge(m.magnetLink, parentId);
-                        success++;
+                    const batchMLinks = m.magnetLinks || (m.magnetLink ? [m.magnetLink] : []);
+                    if (batchMLinks.length > 0) {
+                        for (const link of batchMLinks) {
+                            try {
+                                await sendToPikPakViaBridge(link, parentId);
+                                success++;
+                            } catch (e) { failed++; }
+                            await new Promise(r => setTimeout(r, 300));
+                        }
                     } else if (m.videoUrl) {
                         await sendToPikPakViaBridge(m.videoUrl, parentId);
                         success++;
