@@ -2397,26 +2397,35 @@ function bindMagnetLinkEvents() {
             return 0;
         }
 
-        // 懒加载缩略图 + 标题 + 大小（仅未加载的）
+        // 懒加载缩略图 + 标题 + 大小（仅未加载的，分批并发避免限流）
+        const pending = [];
         links.forEach((link, idx) => {
-            if (card.magnetLinksMeta[idx].screenshots?.length) return;
-            magnetPreviewWithFallback(link).then(data => {
-                const name = data.name || '';
-                const shots = collectShots(data);
-                const src = shots[0]?.src || '';
-                const fileSize = extractSize(data);
-                card.magnetLinksMeta[idx] = { link, title: name, thumb: src, screenshots: shots.map(s => s.src), size: fileSize };
-                const thumb = document.getElementById('mp-thumb-' + idx);
-                if (thumb && src) { thumb.style.backgroundImage = `url(${src})`; thumb.textContent = ''; }
-                else if (thumb) thumb.textContent = '📁';
-                const titleEl = document.getElementById('mp-title-' + idx);
-                if (titleEl && name) titleEl.textContent = name;
-            }).catch(() => {
-                const thumb = document.getElementById('mp-thumb-' + idx);
-                if (thumb) thumb.textContent = '📁';
-                if (!card.magnetLinksMeta[idx].title) card.magnetLinksMeta[idx].title = `磁力 #${idx + 1}`;
-            });
+            if (!card.magnetLinksMeta[idx].screenshots?.length) pending.push({ link, idx });
         });
+        (async () => {
+            const BATCH = 5;
+            for (let i = 0; i < pending.length; i += BATCH) {
+                const batch = pending.slice(i, i + BATCH);
+                await Promise.all(batch.map(({ link, idx }) =>
+                    magnetPreviewWithFallback(link).then(data => {
+                        const name = data.name || '';
+                        const shots = collectShots(data);
+                        const src = shots[0]?.src || '';
+                        const fileSize = extractSize(data);
+                        card.magnetLinksMeta[idx] = { link, title: name, thumb: src, screenshots: shots.map(s => s.src), size: fileSize };
+                        const thumb = document.getElementById('mp-thumb-' + idx);
+                        if (thumb && src) { thumb.style.backgroundImage = `url(${src})`; thumb.textContent = ''; }
+                        else if (thumb) thumb.textContent = '📁';
+                        const titleEl = document.getElementById('mp-title-' + idx);
+                        if (titleEl && name) titleEl.textContent = name;
+                    }).catch(() => {
+                        const thumb = document.getElementById('mp-thumb-' + idx);
+                        if (thumb) thumb.textContent = '📁';
+                        if (!card.magnetLinksMeta[idx].title) card.magnetLinksMeta[idx].title = `磁力 #${idx + 1}`;
+                    })
+                ));
+            }
+        })();
 
         // 点击缩略图切换封面
         overlay.querySelectorAll('.merged-preview-thumb').forEach(el => {
