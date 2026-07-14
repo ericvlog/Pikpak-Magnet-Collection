@@ -2362,6 +2362,14 @@ function bindMagnetLinkEvents() {
                     card.magnetLink = links[0];
                     renderPreviewList();
                     document.getElementById('mpLinkCount').textContent = `共 ${links.length} 条磁力链接`;
+                    // 更新卡片徽章
+                    const cardEl = document.querySelector(`.magnet-card[data-id="${card.id}"]`);
+                    if (cardEl) {
+                        const spans = cardEl.querySelectorAll('.card-content span');
+                        for (const span of spans) {
+                            if (span.textContent.includes('🧲')) { span.textContent = `🧲 磁力${links.length > 1 ? '×' + links.length : ''}`; break; }
+                        }
+                    }
                     saveToDB().catch(() => {});
                 });
             });
@@ -2379,7 +2387,9 @@ function bindMagnetLinkEvents() {
                 const shots = collectShots(data);
                 const shotIdx = Math.min(idx, shots.length - 1);
                 const src = shots[shotIdx]?.src || shots[0]?.src || '';
-                card.magnetLinksMeta[idx] = { link, title: name, thumb: src, screenshots: shots.map(s => s.src), size: data.size || '' };
+                let fileSize = parseInt(data.size, 10) || 0;
+                if (!fileSize && Array.isArray(data.files)) fileSize = data.files.reduce((s, f) => s + (parseInt(f.size, 10) || 0), 0);
+                card.magnetLinksMeta[idx] = { link, title: name, thumb: src, screenshots: shots.map(s => s.src), size: fileSize };
                 const thumb = document.getElementById('mp-thumb-' + idx);
                 if (thumb && src) { thumb.style.backgroundImage = `url(${src})`; thumb.textContent = ''; }
                 else if (thumb) thumb.textContent = '📁';
