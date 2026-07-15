@@ -849,6 +849,7 @@
                 <div class="menu-item" id="menuBatchCleanTitles"><i class="fas fa-broom"></i><span>🧹 批量清理标题</span></div>
                 <div class="menu-item" id="menuConvertAllImagesToLocal"><i class="fas fa-database"></i><span>📦 一键转换所有图片到本地</span></div>
                 <div class="menu-item" id="menuViewFailList"><i class="fas fa-list-ul"></i><span>⚠️ 查看转换失败列表</span></div>
+                <div class="menu-item" id="menuBatchResolveTitles"><i class="fas fa-sync-alt"></i><span>🔄 批量修复标题</span></div>
                 <div class="menu-item" id="menuViewFailedPreviews"><i class="fas fa-exclamation-triangle"></i><span>⚠️ 预览失败（429）</span></div>
                 <div class="menu-item" id="menuFullBackupWithImages"><i class="fas fa-archive"></i><span>💾 完整备份（含图片）</span></div>
                 <div class="menu-item" id="menuFullRestoreWithImages"><i class="fas fa-folder-open"></i><span>📂 恢复完整备份</span></div>
@@ -4239,6 +4240,15 @@ function loginGDrive() {
         showToast(`✅ 已解析 ${newMagnets.filter(m => m.title && !/^[A-F0-9]{40}$/i.test(m.title)).length}/${newMagnets.length} 个卡片标题`);
     }
 
+    // ===== 批量修复 hash 标题 =====
+    async function batchResolveHashTitles() {
+        const hashRe = /^[A-F0-9]{40}$/i;
+        const hashCards = magnets.filter(m => hashRe.test(m.title) && m.magnetLink);
+        if (hashCards.length === 0) { showToast('没有需要修复的标题', false); return; }
+        showToast(`正在分批解析 ${hashCards.length} 个标题...`);
+        await resolveNewMagnetMeta(hashCards);
+    }
+
     // ================================================================
     // 剪贴板监视
     // ================================================================
@@ -5410,6 +5420,7 @@ const magnetLinkEl = m.magnetLink ? `<a href="${escapeHtml(m.magnetLink)}" class
         document.getElementById('menuBatchCleanTitles').onclick = batchCleanTitles;
         document.getElementById('menuConvertAllImagesToLocal').onclick = convertAllImagesToLocal;
         document.getElementById('menuViewFailList').onclick = () => showFailListModal();
+        document.getElementById('menuBatchResolveTitles').onclick = batchResolveHashTitles;
         document.getElementById('menuViewFailedPreviews').onclick = showFailedPreviewModal;
         document.getElementById('menuFullBackupWithImages').onclick = fullBackupWithImages;
         document.getElementById('menuRestoreImagesFromFolder').onclick = restoreImagesFromFolder;
