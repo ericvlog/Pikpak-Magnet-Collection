@@ -898,7 +898,13 @@
                 <option value="watchWant">👀 想看</option>
                 <option value="watchWatched">✅ 已看</option>
                 <option value="watchNone">⬜ 未标记</option>
+                <option value="dupTitle">🔗 标题相似</option>
             </select>
+            <div id="dupSliderContainer" style="display:none;align-items:center;gap:6px;flex-wrap:nowrap;margin-left:4px;">
+                <span style="font-size:0.75rem;white-space:nowrap;">相似度</span>
+                <input type="range" id="dupFilterSlider" min="60" max="100" value="80" step="1" style="width:80px;">
+                <span id="dupFilterValue" style="font-size:0.75rem;min-width:35px;">80%</span>
+            </div>
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:nowrap;"><span style="font-size:0.8rem;white-space:nowrap;">每次加载</span><select id="pageSizeSelect" style="width:65px;"><option value="20">20</option><option value="50" selected>50</option><option value="100">100</option><option value="200">200</option></select></div>
             <button id="resetFilterBtn" class="btn btn-outline" style="white-space:nowrap;">重置</button><div id="statsDisplay" class="stats-badge">📊 0 张卡片</div>
         </div>
@@ -1699,6 +1705,14 @@
     async function resolveSingleGroup(group,groupDiv){ const toDelete=[],keep=[]; for(let idx=0;idx<group.items.length;idx++){ if(group.selectedIndices.has(idx)) keep.push(group.items[idx].id); else toDelete.push(group.items[idx].id); } if(keep.length===0){ showToast(`错误：该重复组至少需要保留一个卡片`,true); return false; } if(toDelete.length===0){ showToast(`该组没有需要删除的卡片`,false); return false; } magnets=magnets.filter(m=>!toDelete.includes(m.id)); for(const id of toDelete) if(selectedCardIds.has(id)) selectedCardIds.delete(id); await saveToDB(); const mode=document.querySelector('input[name="dupMode"]:checked').value; const thres=mode==='title'?parseFloat(document.getElementById('similaritySlider').value)/100:0.8; const newGroups=findDuplicateGroups(mode,thres); duplicateGroups=newGroups; renderDuplicateModal(newGroups); updateFilteredList(); currentLoadedCount=0; await renderLoadedCards(); updateStats(allFilteredMagnets.length,magnets.length); showToast(`已删除 ${toDelete.length} 个卡片`); return true; }
     function renderDuplicateModal(groups){ const container=document.getElementById('duplicateGroupsContainer'); if(!container) return; if(groups.length===0){ container.innerHTML='<div style="text-align:center;padding:2rem">未发现重复项</div>'; return; } container.innerHTML=''; groups.forEach((group,gidx)=>{ const groupDiv=document.createElement('div'); groupDiv.className='duplicate-group'; const header=document.createElement('h4'); header.innerHTML=`重复组 ${gidx+1} (${escapeHtml(group.key.substring(0,80))})`; const btnGroup=document.createElement('div'); btnGroup.className='group-header-actions'; const copyBtn=document.createElement('button'); copyBtn.textContent='📋 复制组内链接'; copyBtn.className='copy-group-links-btn'; copyBtn.onclick=()=>{ const links=group.items.map(i=>i.magnetLink).filter(l=>l); navigator.clipboard.writeText(links.join('\n')).then(()=>showToast(`已复制 ${links.length} 个磁力链接`)).catch(()=>alert('复制失败')); }; const selectAll=document.createElement('button'); selectAll.textContent='全选'; selectAll.className='group-select-all'; selectAll.onclick=()=>{ const cbs=groupDiv.querySelectorAll('.duplicate-item-checkbox'); const all=Array.from(cbs).every(cb=>cb.checked); cbs.forEach(cb=>cb.checked=!all); const newSet=new Set(); cbs.forEach((cb,idx)=>{if(cb.checked) newSet.add(idx);}); group.selectedIndices=newSet; }; const applyBtn=document.createElement('button'); applyBtn.textContent='删除其余 (本组)'; applyBtn.className='apply-group-btn'; applyBtn.onclick=async()=>{ await resolveSingleGroup(group,groupDiv); }; btnGroup.appendChild(copyBtn); btnGroup.appendChild(selectAll); btnGroup.appendChild(applyBtn); header.appendChild(btnGroup); groupDiv.appendChild(header); const itemsDiv=document.createElement('div'); group.items.forEach((item,idx)=>{ const itemDiv=document.createElement('div'); itemDiv.className='duplicate-item'; const cb=document.createElement('input'); cb.type='checkbox'; cb.className='duplicate-item-checkbox'; cb.checked=group.selectedIndices.has(idx); cb.addEventListener('change',()=>{ if(cb.checked) group.selectedIndices.add(idx); else group.selectedIndices.delete(idx); }); const info=document.createElement('div'); info.className='duplicate-info'; info.innerHTML=`<div class="duplicate-title">${escapeHtml(item.title)}</div><div class="duplicate-magnet">${escapeHtml(item.magnetLink.substring(0,60))}...</div><div>标签: ${item.tagIds.map(tid=>tags.find(t=>t.id===tid)?.name).filter(n=>n).join(', ')} | 评分: ${item.rating}</div>`; const merge=document.createElement('button'); merge.textContent='合并标签'; merge.className='merge-tags-btn'; merge.onclick=()=>{ const target=group.items[idx]; const others=group.items.filter((_,i)=>i!==idx); for(const other of others){ for(const tid of other.tagIds){ if(!target.tagIds.includes(tid)) target.tagIds.push(tid); } } renderDuplicateModal(groups); showToast(`已将其他卡片的标签合并到“${target.title.substring(0,30)}”`); }; const delOther=document.createElement('button'); delOther.textContent='删除其他'; delOther.className='delete-other-btn'; delOther.onclick=async()=>{ if(confirm(`确定要删除除“${item.title.substring(0,30)}”之外的其他重复卡片吗？`)){ const toDel=group.items.filter((_,i)=>i!==idx); const ids=toDel.map(c=>c.id); magnets=magnets.filter(m=>!ids.includes(m.id)); for(const id of ids) if(selectedCardIds.has(id)) selectedCardIds.delete(id); await saveToDB(); const mode=document.querySelector('input[name="dupMode"]:checked').value; const thres=mode==='title'?parseFloat(document.getElementById('similaritySlider').value)/100:0.8; const newGroups=findDuplicateGroups(mode,thres); duplicateGroups=newGroups; renderDuplicateModal(newGroups); updateFilteredList(); currentLoadedCount=0; await renderLoadedCards(); updateStats(allFilteredMagnets.length,magnets.length); showToast(`已删除 ${toDel.length} 个卡片`); } }; itemDiv.appendChild(cb); itemDiv.appendChild(info); itemDiv.appendChild(merge); itemDiv.appendChild(delOther); itemsDiv.appendChild(itemDiv); }); groupDiv.appendChild(itemsDiv); container.appendChild(groupDiv); }); }
     async function resolveAllDuplicates(groups){ if(!groups||groups.length===0){ showToast('没有重复项需要清理'); return; } const toDel=new Set(); for(const group of groups){ const keep=new Set(); for(const idx of group.selectedIndices){ const item=group.items[idx]; if(item&&item.id) keep.add(item.id); } if(keep.size===0){ showToast(`错误：重复组 “${group.key.substring(0,40)}” 至少需要保留一个卡片`,true); return; } for(const item of group.items) if(!keep.has(item.id)) toDel.add(item.id); } if(toDel.size===0){ showToast('没有需要删除的卡片',false); return; } magnets=magnets.filter(m=>!toDel.has(m.id)); for(const id of toDel) if(selectedCardIds.has(id)) selectedCardIds.delete(id); await saveToDB(); updateFilteredList(); currentLoadedCount=0; await renderLoadedCards(); updateStats(allFilteredMagnets.length,magnets.length); showToast(`已删除 ${toDel.size} 个重复卡片`); }
+    function rebuildDupTitleCache() {
+        const slider = document.getElementById('dupFilterSlider');
+        const threshold = slider ? parseFloat(slider.value) / 100 : 0.8;
+        const groups = findDuplicateGroups('title', threshold);
+        const dupIds = new Set();
+        groups.forEach(g => g.items.forEach(item => dupIds.add(item.id)));
+        window._dupCache = { threshold, groups, dupIds };
+    }
     function openDuplicateModal(){ const mode=document.querySelector('input[name="dupMode"]:checked').value; let thres=0.8; if(mode==='title'){ const slider=document.getElementById('similaritySlider'); if(slider) thres=parseFloat(slider.value)/100; document.getElementById('similarityControl').style.display='flex'; }else{ document.getElementById('similarityControl').style.display='none'; } document.getElementById('keepOnePerGroupBtn').style.display=mode==='messageUrl'?'':'none'; const groups=findDuplicateGroups(mode,thres); duplicateGroups=groups; renderDuplicateModal(groups); document.getElementById('duplicateModal').style.display='flex'; }
     function bindDuplicateModalEvents(){ const radios=document.querySelectorAll('input[name="dupMode"]'); radios.forEach(radio=>{ radio.addEventListener('change',()=>{ const newMode=document.querySelector('input[name="dupMode"]:checked').value; const slider=document.getElementById('similaritySlider'); if(newMode==='title'){ document.getElementById('similarityControl').style.display='flex'; const thres=slider?parseFloat(slider.value)/100:0.8; const groups=findDuplicateGroups('title',thres); duplicateGroups=groups; renderDuplicateModal(groups); }else{ document.getElementById('similarityControl').style.display='none'; const groups=findDuplicateGroups(newMode); duplicateGroups=groups; renderDuplicateModal(groups); } document.getElementById('keepOnePerGroupBtn').style.display=newMode==='messageUrl'?'':'none'; }); }); const slider=document.getElementById('similaritySlider'); if(slider){ let timeout; slider.addEventListener('input',(e)=>{ document.getElementById('similarityValue').innerText=e.target.value+'%'; if(timeout) clearTimeout(timeout); timeout=setTimeout(()=>{ const val=parseFloat(slider.value)/100; const mode=document.querySelector('input[name="dupMode"]:checked').value; if(mode==='title'){ const groups=findDuplicateGroups('title',val); duplicateGroups=groups; renderDuplicateModal(groups); } },300); }); } document.getElementById('applyDuplicateResolutionBtn').onclick=()=>{ if(duplicateGroups&&duplicateGroups.length>0) resolveAllDuplicates(duplicateGroups); else showToast('没有重复项需要清理',true); document.getElementById('duplicateModal').style.display='none'; }; document.getElementById('keepOnePerGroupBtn').onclick=async()=>{ if(!duplicateGroups||duplicateGroups.length===0){ showToast('没有重复项需要清理',true); return; } const toDel=new Set(); for(const group of duplicateGroups){ const keep=group.items[0]; if(!keep||!keep.id) continue; for(const item of group.items){ if(item.id!==keep.id) toDel.add(item.id); } } if(toDel.size===0){ showToast('没有需要删除的卡片',false); return; } if(!confirm(`将删除 ${toDel.size} 个重复卡片，每组只保留一个，确定？`)) return; magnets=magnets.filter(m=>!toDel.has(m.id)); for(const id of toDel) if(selectedCardIds.has(id)) selectedCardIds.delete(id); await saveToDB(); const mode=document.querySelector('input[name="dupMode"]:checked').value; const groups=findDuplicateGroups(mode); duplicateGroups=groups; renderDuplicateModal(groups); updateFilteredList(); currentLoadedCount=0; await renderLoadedCards(); updateStats(allFilteredMagnets.length,magnets.length); showToast(`已删除 ${toDel.size} 个重复卡片`); }; document.getElementById('cancelDuplicateBtn').onclick=()=>document.getElementById('duplicateModal').style.display='none'; document.getElementById('closeDuplicateModalBtn').onclick=()=>document.getElementById('duplicateModal').style.display='none'; }
 
@@ -5011,9 +5025,27 @@ function updateFilteredList() {
             if (filterType === 'watchWant' && !m.wantToWatch) return false;
             if (filterType === 'watchWatched' && !m.watched) return false;
             if (filterType === 'watchNone' && (m.wantToWatch || m.watched)) return false;
+            if (filterType === 'dupTitle') {
+                if (!window._dupCache || window._dupCache.threshold !== parseFloat(document.getElementById('dupFilterSlider').value)/100) {
+                    rebuildDupTitleCache();
+                }
+                if (!window._dupCache.dupIds.has(m.id)) return false;
+            }
             return true;
         });
-        filtered.sort((a,b) => (b.createdAt||0)-(a.createdAt||0));
+        if (filterType === 'dupTitle' && window._dupCache) {
+            const groupOrder = new Map();
+            window._dupCache.groups.forEach((g, gi) => {
+                g.items.forEach(id => groupOrder.set(id, gi));
+            });
+            filtered.sort((a, b) => {
+                const ga = groupOrder.get(a.id) ?? 999;
+                const gb = groupOrder.get(b.id) ?? 999;
+                return ga - gb;
+            });
+        } else {
+            filtered.sort((a,b) => (b.createdAt||0)-(a.createdAt||0));
+        }
         allFilteredMagnets = filtered;
     }
 async function renderLoadedCards() {
@@ -5048,6 +5080,13 @@ async function renderLoadedCards() {
             if (hasTg) badges.push(`${m.restricted ? '🔒 ' : ''}📱 TG视频${videoCount > 1 ? '×' + videoCount : ''}`);
             else if (m.videoUrl) badges.push(`${m.restricted ? '🔒 ' : ''}🎬 视频${videoCount > 1 ? '×' + videoCount : ''}`);
             if (imgBadge) badges.push(imgBadge);
+            if (filterType === 'dupTitle' && window._dupCache) {
+                const gidx = window._dupCache.groups.findIndex(g => g.items.some(item => item.id === m.id));
+                if (gidx !== -1) {
+                    const g = window._dupCache.groups[gidx];
+                    badges.push(`🔗 组#${gidx+1} (${g.items.length}张)`);
+                }
+            }
             const badgeRow = badges.length > 0 ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin:4px 0;">${badges.map(b => `<span style="font-size:0.75rem;padding:1px 7px;border-radius:6px;background:${b.includes('📂')?'#059669':b.includes('🧲')?'#2563eb':(b.includes('📱')||b.includes('🎬'))?'#7c3aed':b.includes('本地')?'#16a34a':b.includes('网络')?'#ea580c':'#555'};color:#fff;white-space:nowrap;">${b}</span>`).join('')}</div>` : '';
             const imgUrl = m.imageUrl ? (m.imageUrl.startsWith('img_') ? '' : m.imageUrl) : '';
 const magnetLinkEl = m.magnetLink ? `<a href="${escapeHtml(m.magnetLink)}" class="magnet-link" data-magnet="${escapeHtml(m.magnetLink)}">🔗 ${escapeHtml(shortLink)}</a>` : (m.videoUrl ? `<div class="magnet-link" style="font-size:0.75rem;color:var(--text-secondary);word-break:break-all;">🔗 ${escapeHtml(shortLink)}</div>` : (m.messageUrl ? `<a href="${escapeHtml(m.messageUrl)}" class="magnet-link" target="_blank" rel="noopener noreferrer">📨 ${escapeHtml(shortLink)}</a>` : ''));
@@ -5297,6 +5336,12 @@ const magnetLinkEl = m.magnetLink ? `<a href="${escapeHtml(m.magnetLink)}" class
         function applyFilter(type) {
             filterType = type;
             document.getElementById('filterTypeSelect').value = type;
+            const container = document.getElementById('dupSliderContainer');
+            if (type === 'dupTitle') {
+                container.style.display = 'flex';
+            } else {
+                container.style.display = 'none';
+            }
             updateFilteredList();
             currentLoadedCount = 0;
             renderLoadedCards();
@@ -5305,6 +5350,18 @@ const magnetLinkEl = m.magnetLink ? `<a href="${escapeHtml(m.magnetLink)}" class
         document.getElementById('filterTypeSelect').onchange = function() {
             applyFilter(this.value);
         };
+        const dupSlider = document.getElementById('dupFilterSlider');
+        if (dupSlider) {
+            let dupTimer;
+            dupSlider.addEventListener('input', function(e) {
+                document.getElementById('dupFilterValue').innerText = e.target.value + '%';
+                if (dupTimer) clearTimeout(dupTimer);
+                dupTimer = setTimeout(() => {
+                    window._dupCache = null;
+                    applyFilter('dupTitle');
+                }, 300);
+            });
+        }
     }
 
     async function deleteAllFailCards() {
