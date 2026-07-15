@@ -4246,10 +4246,10 @@ function loginGDrive() {
     // ===== 批量修复 hash 标题 =====
     async function batchResolveHashTitles() {
         const hashRe = /^[A-F0-9]{40}$/i;
-        const hashCards = magnets.filter(m => hashRe.test(m.title) && m.magnetLink);
-        if (hashCards.length === 0) { showToast('没有需要修复的标题', false); return; }
-        showToast(`正在分批解析 ${hashCards.length} 个标题...`);
-        await resolveNewMagnetMeta(hashCards);
+        const noTitle = magnets.filter(m => m.magnetLink && (!m.title || hashRe.test(m.title) || m.title === '未知' || m.title === '未知标题' || m.title === ''));
+        if (noTitle.length === 0) { showToast('没有需要修复的卡片', false); return; }
+        showToast(`正在分批解析 ${noTitle.length} 个标题...`);
+        await resolveNewMagnetMeta(noTitle);
     }
 
     // ================================================================
