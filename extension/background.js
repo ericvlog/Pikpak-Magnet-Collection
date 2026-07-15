@@ -839,7 +839,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     } catch (e) { console.warn('[后台] clearPendingMagnets: 获取 Bot 列表失败', e.message); }
                     for (const item of items) {
                         let botId = item.botPendingId;
-                        console.log(`[后台] clearPendingMagnets: item.botPendingId=${botId}, messageUrl=${item.messageUrl?.substring(0, 30)}`);
+                        if (!botId && !item.magnet && !item.videoUrl && !item.messageUrl) continue;
                         if (!botId) {
                             const match = botItems.find(b =>
                                 (item.messageUrl && b.messageUrl === item.messageUrl) ||
@@ -853,8 +853,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                                 const delResp = await fetch(`http://localhost:${port}/api/pending/${botId}`, { method: 'DELETE' });
                                 console.log(`[后台] clearPendingMagnets: DELETE ${botId} → ${delResp.status}`);
                             } catch (e) { console.warn('[后台] clearPendingMagnets: DELETE 失败', e.message); }
-                        } else {
-                            console.warn('[后台] clearPendingMagnets: 找不到 botId，跳过');
+                        } else if (item.magnet || item.videoUrl) {
+                            console.log('[后台] clearPendingMagnets: 无 botId，跳过页面直存条目');
                         }
                     }
                 }

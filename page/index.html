@@ -4681,8 +4681,8 @@ function loginGDrive() {
         // 绑定事件
         container.querySelectorAll('.preview-btn').forEach(btn => { btn.onclick = () => { const idx = parseInt(btn.dataset.index); const magnet = batchItems[idx].magnet; const onUpdateBatchItem = (status) => { batchItems[idx].status = status; renderBatchList(); saveBatchItemsToStorage(); }; showCardPreview(magnet, '', onUpdateBatchItem); }; });
         container.querySelectorAll('.offline-btn').forEach(btn => { btn.onclick = async () => { const idx = parseInt(btn.dataset.index); const magnet = batchItems[idx].magnet; try { await sendToPikPakViaBridge(magnet); batchItems[idx].status = 'success'; } catch (err) { batchItems[idx].status = 'error'; } renderBatchList(); saveBatchItemsToStorage(); }; });
-        container.querySelectorAll('.save-btn').forEach(btn => { btn.onclick = async () => { const idx = parseInt(btn.dataset.index); const magnet = batchItems[idx].magnet; let meta = { title: '', size: '', imageUrl: '' }; try { meta = await resolveBatchItemMetadata(magnet); } catch (e) { if (e.message === '429') { batchItems[idx].status = 'error'; renderBatchList(); saveBatchItemsToStorage(); showToast('预览服务繁忙，稍后重试', true); return; } } try { await new Promise((resolve, reject) => { const handler = (event) => { if (event.data && event.data.type === 'SAVE_MAGNET_RESULT') { window.removeEventListener('message', handler); if (event.data.success) resolve(true); else reject(new Error(event.data.error || '保存失败')); } }; window.addEventListener('message', handler); window.postMessage({ type: 'REQUEST_SAVE_MAGNET', magnet: magnet, title: meta.title, size: meta.size, imageUrl: meta.imageUrl }, '*'); setTimeout(() => { window.removeEventListener('message', handler); reject(new Error('超时')); }, 10000); }); batchItems[idx].status = 'success'; } catch (err) { batchItems[idx].status = 'error'; } renderBatchList(); saveBatchItemsToStorage(); }; });
-        container.querySelectorAll('.both-btn').forEach(btn => { btn.onclick = async () => { const idx = parseInt(btn.dataset.index); const magnet = batchItems[idx].magnet; let meta = { title: '', size: '', imageUrl: '' }; try { meta = await resolveBatchItemMetadata(magnet); } catch (e) { if (e.message === '429') { batchItems[idx].status = 'error'; renderBatchList(); saveBatchItemsToStorage(); showToast('预览服务繁忙，稍后重试', true); return; } } try { await Promise.all([ sendToPikPakViaBridge(magnet), new Promise((resolve, reject) => { const handler = (event) => { if (event.data && event.data.type === 'SAVE_MAGNET_RESULT') { window.removeEventListener('message', handler); if (event.data.success) resolve(true); else reject(new Error(event.data.error || '保存失败')); } }; window.addEventListener('message', handler); window.postMessage({ type: 'REQUEST_SAVE_MAGNET', magnet: magnet, title: meta.title, size: meta.size, imageUrl: meta.imageUrl }, '*'); setTimeout(() => { window.removeEventListener('message', handler); reject(new Error('超时')); }, 10000); }) ]); batchItems[idx].status = 'success'; } catch (err) { batchItems[idx].status = 'error'; } renderBatchList(); saveBatchItemsToStorage(); }; });
+        container.querySelectorAll('.save-btn').forEach(btn => { btn.onclick = async () => { const idx = parseInt(btn.dataset.index); const magnet = batchItems[idx].magnet; if (magnets.some(m => m.magnetLink?.toLowerCase() === magnet.toLowerCase())) { showToast('已存在，跳过', false); batchItems[idx].status = 'success'; renderBatchList(); saveBatchItemsToStorage(); return; } const hash = magnet.match(/xt=urn:btih:([a-f0-9]+)/i)?.[1] || magnet.substring(0, 20); magnets.push({ id: Date.now() + Math.random(), title: hash, magnetLink: magnet, size: '', imageUrl: '', extraImages: [], tagIds: [], createdAt: Date.now() }); await saveToDB(); updateFilteredList(); currentLoadedCount = 0; await renderLoadedCards(); updateStats(allFilteredMagnets.length, magnets.length); batchItems[idx].status = 'success'; renderBatchList(); saveBatchItemsToStorage(); }; });
+        container.querySelectorAll('.both-btn').forEach(btn => { btn.onclick = async () => { const idx = parseInt(btn.dataset.index); const magnet = batchItems[idx].magnet; if (magnets.some(m => m.magnetLink?.toLowerCase() === magnet.toLowerCase())) { showToast('已存在，跳过', false); } else { const hash = magnet.match(/xt=urn:btih:([a-f0-9]+)/i)?.[1] || magnet.substring(0, 20); magnets.push({ id: Date.now() + Math.random(), title: hash, magnetLink: magnet, size: '', imageUrl: '', extraImages: [], tagIds: [], createdAt: Date.now() }); } try { await sendToPikPakViaBridge(magnet); batchItems[idx].status = 'success'; } catch (err) { batchItems[idx].status = 'error'; } await saveToDB(); updateFilteredList(); currentLoadedCount = 0; await renderLoadedCards(); updateStats(allFilteredMagnets.length, magnets.length); renderBatchList(); saveBatchItemsToStorage(); }; });
         container.querySelectorAll('.delete-btn').forEach(btn => { btn.onclick = () => { const idx = parseInt(btn.dataset.index); batchItems.splice(idx, 1); renderBatchList(); saveBatchItemsToStorage(); if (batchItems.length === 0) document.getElementById('batchParseResult').style.display = 'none'; }; });
     }
 
@@ -5837,6 +5837,7 @@ document.getElementById('pagePikpakLoginBtn').onclick = () => { ppUpdateLoginUI(
         document.getElementById('batchSaveAllBtn').onclick = async () => {
             if (batchItems.length === 0) { showToast('列表为空', true); return; }
             let successCount = 0, failCount = 0;
+            const newMagnets = [];
             for (let i = 0; i < batchItems.length; i++) {
                 if (batchItems[i].status === 'success') continue;
                 const magnet = batchItems[i].magnet;
@@ -5847,19 +5848,16 @@ document.getElementById('pagePikpakLoginBtn').onclick = () => { ppUpdateLoginUI(
                         batchItems[i].status = 'success';
                         successCount++;
                     } else {
-                        let meta = { title: '', size: '', imageUrl: '' };
-                        try { meta = await resolveBatchItemMetadata(magnet); } catch (e) { if (e.message === '429') { batchItems[i].status = 'error'; failCount++; renderBatchList(); saveBatchItemsToStorage(); await new Promise(r => setTimeout(r, 500)); continue; } }
-                        await new Promise((resolve, reject) => {
-                            const handler = (event) => {
-                                if (event.data && event.data.type === 'SAVE_MAGNET_RESULT') {
-                                    window.removeEventListener('message', handler);
-                                    if (event.data.success) resolve(true);
-                                    else reject(new Error(event.data.error || '保存失败'));
-                                }
-                            };
-                            window.addEventListener('message', handler);
-                            window.postMessage({ type: 'REQUEST_SAVE_MAGNET', magnet: magnet, title: meta.title, size: meta.size, imageUrl: meta.imageUrl }, '*');
-                            setTimeout(() => { window.removeEventListener('message', handler); reject(new Error('超时')); }, 10000);
+                        const hash = magnet.match(/xt=urn:btih:([a-f0-9]+)/i)?.[1] || magnet.substring(0, 20);
+                        newMagnets.push({
+                            id: Date.now() + Math.random(),
+                            title: hash,
+                            magnetLink: magnet,
+                            size: '',
+                            imageUrl: '',
+                            extraImages: [],
+                            tagIds: [],
+                            createdAt: Date.now()
                         });
                         batchItems[i].status = 'success';
                         successCount++;
@@ -5870,32 +5868,42 @@ document.getElementById('pagePikpakLoginBtn').onclick = () => { ppUpdateLoginUI(
                 }
                 renderBatchList();
                 saveBatchItemsToStorage();
-                await new Promise(r => setTimeout(r, 300));
+            }
+            if (newMagnets.length > 0) {
+                magnets.push(...newMagnets);
+                await saveToDB();
+                updateFilteredList();
+                currentLoadedCount = 0;
+                await renderLoadedCards();
+                updateStats(allFilteredMagnets.length, magnets.length);
             }
             showToast(`批量保存完成：成功 ${successCount} 项，失败 ${failCount} 项`, failCount > 0);
         };
         document.getElementById('batchBothAllBtn').onclick = async () => {
             if (batchItems.length === 0) { showToast('列表为空', true); return; }
             let successCount = 0, failCount = 0;
+            const newMagnets = [];
             for (let i = 0; i < batchItems.length; i++) {
                 if (batchItems[i].status === 'success') continue;
                 const magnet = batchItems[i].magnet;
                 try {
-                    let meta = { title: '', size: '', imageUrl: '' };
-                    try { meta = await resolveBatchItemMetadata(magnet); } catch (e) { if (e.message === '429') { batchItems[i].status = 'error'; failCount++; renderBatchList(); saveBatchItemsToStorage(); await new Promise(r => setTimeout(r, 500)); continue; } }
+                    const existing = magnets.find(m => m.magnetLink.toLowerCase() === magnet.toLowerCase());
+                    if (existing) {
+                        showToast(`"${existing.title}" 已存在，跳过`, false);
+                    } else {
+                        const hash = magnet.match(/xt=urn:btih:([a-f0-9]+)/i)?.[1] || magnet.substring(0, 20);
+                        newMagnets.push({
+                            id: Date.now() + Math.random(),
+                            title: hash,
+                            magnetLink: magnet,
+                            size: '',
+                            imageUrl: '',
+                            extraImages: [],
+                            tagIds: [],
+                            createdAt: Date.now()
+                        });
+                    }
                     await sendToPikPakViaBridge(magnet);
-                    await new Promise((resolve, reject) => {
-                        const handler = (event) => {
-                            if (event.data && event.data.type === 'SAVE_MAGNET_RESULT') {
-                                window.removeEventListener('message', handler);
-                                if (event.data.success) resolve(true);
-                                else reject(new Error(event.data.error || '保存失败'));
-                            }
-                        };
-                        window.addEventListener('message', handler);
-                        window.postMessage({ type: 'REQUEST_SAVE_MAGNET', magnet: magnet, title: meta.title, size: meta.size, imageUrl: meta.imageUrl }, '*');
-                        setTimeout(() => { window.removeEventListener('message', handler); reject(new Error('超时')); }, 10000);
-                    });
                     batchItems[i].status = 'success';
                     successCount++;
                 } catch (err) {
@@ -5905,6 +5913,14 @@ document.getElementById('pagePikpakLoginBtn').onclick = () => { ppUpdateLoginUI(
                 renderBatchList();
                 saveBatchItemsToStorage();
                 await new Promise(r => setTimeout(r, 500));
+            }
+            if (newMagnets.length > 0) {
+                magnets.push(...newMagnets);
+                await saveToDB();
+                updateFilteredList();
+                currentLoadedCount = 0;
+                await renderLoadedCards();
+                updateStats(allFilteredMagnets.length, magnets.length);
             }
             showToast(`批量离线并保存完成：成功 ${successCount} 项，失败 ${failCount} 项`, failCount > 0);
         };
