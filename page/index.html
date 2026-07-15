@@ -4265,6 +4265,7 @@ function loginGDrive() {
             // ── Phase A: 预览 ──
             const previewDelays = [10000, 20000, 40000];
             let data = null;
+            let previewFailed = false;
             for (let attempt = 0; attempt < 4; attempt++) {
                 try {
                     data = await Promise.race([
@@ -4283,19 +4284,16 @@ function loginGDrive() {
                         continue;
                     }
                     console.log(`[meta] #${idx} 预览失败 ${e.message}`);
-                    fail++;
-                    data = null; break;
+                    previewFailed = true; break;
                 }
             }
             if (!data) {
-                if (fail === 0 || true) { /* already counted */ }
-                console.log(`[meta] #${idx} 预览 429 重试耗尽，跳过`);
                 fail++;
+                if (!previewFailed) console.log(`[meta] #${idx} 预览 429 重试耗尽，跳过`);
                 updateProgress(idx + 1, total, ok, fail, '解析中');
                 const titleEl = document.getElementById('progressTitle');
                 if (titleEl) titleEl.textContent = `🔄 正在解析卡片标题... ${idx + 1}/${total}`;
                 try { await saveToDB(); } catch (e) {}
-                // 失败也等 3s
                 if (idx + 1 < total) await new Promise(r => setTimeout(r, 3000));
                 continue;
             }
@@ -4324,9 +4322,11 @@ function loginGDrive() {
             const titleEl = document.getElementById('progressTitle');
             if (titleEl) titleEl.textContent = `🔄 正在解析卡片标题... ${idx + 1}/${total}`;
             try { await saveToDB(); } catch (e) {}
-            // 串行间隔 3s
+            // 动态间隔: 处理快的等短,处理慢的等长,上限3s
             if (idx + 1 < total) {
-                await new Promise(r => setTimeout(r, 3000));
+                const elapsed = Date.now() - tItem;
+                const gap = Math.min(elapsed, 3000);
+                await new Promise(r => setTimeout(r, gap));
             }
         }
 
