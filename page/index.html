@@ -6125,6 +6125,10 @@ document.getElementById('pagePikpakLoginBtn').onclick = () => { ppUpdateLoginUI(
                 await saveToDB();
             }
             nextTagId = tags.length ? Math.max(...tags.map(t=>t.id),0)+1 : 4;
+            // 修复历史遗留的小数 ID
+            let fixedId = false;
+            for (const m of magnets) if (m.id !== Math.floor(m.id)) { m.id = Math.floor(m.id); fixedId = true; }
+            if (fixedId) await saveToDB();
             nextMagnetId = magnets.length ? Math.max(...magnets.map(m=>m.id),0)+1 : 1;
             if (autoTagRules.length === 0) migrateOldRulesFromLocalStorage();
             loadCollapsedState();
