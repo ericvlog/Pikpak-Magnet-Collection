@@ -4177,7 +4177,9 @@ function loginGDrive() {
                 const px = getPPCorsProxy();
                 if (!px) { reject(new Error('未配置代理地址')); return; }
                 const proxyUrl = px + encodeURIComponent(`https://whatslink.info/api/v1/link?url=${encodeURIComponent(magnet)}`);
-                fetch(proxyUrl).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }).then(resolve).catch(reject);
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), 15000);
+                fetch(proxyUrl, { signal: controller.signal }).then(r => { clearTimeout(timer); if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }).then(resolve).catch(e => { clearTimeout(timer); reject(e); });
             }
         });
     }
@@ -4208,9 +4210,14 @@ function loginGDrive() {
                 try { blob = await fetchImageViaExtension(imgUrl); } catch (e) { /* fall through */ }
             }
             if (!blob) {
-                const r = await fetch(imgUrl, { mode: 'cors', referrerPolicy: 'unsafe-url' });
-                if (!r.ok) throw new Error(`HTTP ${r.status}`);
-                blob = await r.blob();
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), 20000);
+                try {
+                    const r = await fetch(imgUrl, { mode: 'cors', referrerPolicy: 'unsafe-url', signal: controller.signal });
+                    clearTimeout(timer);
+                    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                    blob = await r.blob();
+                } catch (e) { clearTimeout(timer); throw e; }
             }
             return await storeImageBlob(imgUrl, blob);
         } catch (e) { return imgUrl; }
