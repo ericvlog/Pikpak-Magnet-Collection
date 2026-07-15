@@ -4343,19 +4343,6 @@ function loginGDrive() {
         showToast(msg);
     }
 
-        console.log(`[meta] 全部完成 预览${ok}/${total} 图片失败${imgFail} 总耗时${(Date.now()-tStart)}ms`);
-        hideProgressModal();
-        await saveToDB();
-        updateFilteredList();
-        currentLoadedCount = 0;
-        await renderLoadedCards();
-        updateStats(allFilteredMagnets.length, magnets.length);
-        let msg = `✅ 已解析 ${ok}/${total} 个卡片标题`;
-        if (imgFail > 0) msg += `（${imgFail} 张图待补）`;
-        if (fail > 0) msg += `（${fail} 条解析失败）`;
-        showToast(msg);
-    }
-
     // ===== 批量修复 hash 标题 =====
     async function batchResolveHashTitles() {
         const hashRe = /^[A-F0-9]{40}$/i;
