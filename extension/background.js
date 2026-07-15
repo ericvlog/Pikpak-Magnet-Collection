@@ -814,7 +814,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             try {
                 const pending = result.pendingMagnets || [];
                 console.log('[后台] 待导入队列:', pending.length, '条');
-                sendResponse({ success: true, data: pending.slice(-10), total: pending.length });
+                sendResponse({ success: true, data: pending, total: pending.length });
             } catch (err) {
                 console.error('[后台] 待导入队列处理错误:', err);
                 sendResponse({ success: false, error: err.message });
@@ -894,8 +894,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 };
                 if (magnet) entry.magnet = magnet;
                 if (videoUrl) entry.videoUrl = videoUrl;
-                pending.push(entry);
-                while (pending.length > 50) pending.shift();
+                    pending.push(entry);
+                    while (pending.length > 500) pending.shift();
                 await chrome.storage.local.set({ pendingMagnets: pending });
                 sendResponse({ success: true });
             } catch (err) {
@@ -1350,7 +1350,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         entry.videoUrl = item.url;
                     }
                     pending.push(entry);
-                    while (pending.length > 50) pending.shift();
+                while (pending.length > 500) pending.shift();
                     await new Promise((resolve) => {
                         chrome.storage.local.set({ pendingMagnets: pending }, () => {
                             if (chrome.runtime.lastError) { resolve(); }
