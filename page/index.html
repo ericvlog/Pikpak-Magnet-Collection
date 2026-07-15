@@ -4225,23 +4225,35 @@ function loginGDrive() {
 
     // ===== 批量保存后异步解析元数据（分批避免限流）=====
     async function resolveNewMagnetMeta(newMagnets) {
-        const BATCH = 3;
+        const BATCH = 2;
         for (let i = 0; i < newMagnets.length; i += BATCH) {
             const batch = newMagnets.slice(i, i + BATCH);
             await Promise.all(batch.map(async (m) => {
                 try {
-                    const data = await magnetPreviewWithFallback(m.magnetLink);
-                    if (data.name) m.title = data.name;
-                    const shots = collectShots(data);
+                    const data = await Promise.race([
+                        magnetPreviewWithFallback(m.magnetLink),
+                        new Promise((_, rej) => setTimeout(() => rej(new Error('preview timeout')), 20000))
+                    ]);
+                    if (data && data.name) m.title = data.name;
+                    const shots = data ? collectShots(data) : [];
                     const first = shots.find(s => s.src && s.src.startsWith('http'));
-                    if (first) m.imageUrl = await downloadImageToLocal(first.src);
-                    const rawSize = parseInt(data.size, 10);
-                    if (rawSize) m.size = formatSize(rawSize);
+                    if (first) {
+                        try {
+                            const localId = await Promise.race([
+                                downloadImageToLocal(first.src),
+                                new Promise((_, rej) => setTimeout(() => rej(new Error('image dl timeout')), 25000))
+                            ]);
+                            if (localId && localId.startsWith('img_')) m.imageUrl = localId;
+                        } catch (e) { m.imageUrl = first.src; }
+                    }
+                    if (data) { const rawSize = parseInt(data.size, 10); if (rawSize) m.size = formatSize(rawSize); }
                 } catch (e) { /* 单条失败不影响其余 */ }
             }));
-            if (i + BATCH < newMagnets.length) await new Promise(r => setTimeout(r, 1000));
+            // 每批完成后持久化当前进度
+            try { await saveToDB(); } catch (e) {}
+            if (i + BATCH < newMagnets.length) await new Promise(r => setTimeout(r, 1500));
         }
-        // 更新渲染
+        // 最终更新渲染
         await saveToDB();
         updateFilteredList();
         currentLoadedCount = 0;
