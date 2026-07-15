@@ -2455,7 +2455,10 @@ function bindMagnetLinkEvents() {
                 picker.onclick = (ev) => { if (ev.target === picker) picker.remove(); };
                 picker.innerHTML = `<div class="screenshot-picker-card"><div class="flex-between"><h4>选择截图 — ${escapeHtml(meta.title || `磁力 #${idx + 1}`)}</h4><button class="icon-btn" onclick="this.closest('.screenshot-picker-overlay').remove()">✖</button></div><div style="display:flex;flex-wrap:wrap;gap:8px;margin:12px 0;justify-content:center;">${meta.screenshots.map(src => `<div class="screenshot-picker-item"><img src="${src}"><div style="display:flex;gap:4px;padding:4px;"><button class="btn btn-sm btn-outline ss-set-link" data-idx="${idx}" data-src="${src}" style="flex:1;font-size:0.7rem;padding:2px 4px;">此链接</button><button class="btn btn-sm btn-outline ss-set-card" data-idx="${idx}" data-src="${src}" style="flex:1;font-size:0.7rem;padding:2px 4px;">主卡片</button></div></div>`).join('')}</div></div>`;
                 document.body.appendChild(picker);
-                async function saveImgLocal(imgUrl) { return downloadImageToLocal(imgUrl); }
+                async function saveImgLocal(imgUrl) {
+                    try { return await downloadImageToLocal(imgUrl, true); }
+                    catch (e) { showToast(`图片下载失败: ${e.message}`); throw e; }
+                }
                 picker.querySelectorAll('.ss-set-link').forEach(btn => {
                     btn.addEventListener('click', async () => {
                         const i = parseInt(btn.getAttribute('data-idx'));
@@ -4203,24 +4206,47 @@ function loginGDrive() {
     }
 
     // ===== 下载图片到本地存储 =====
-    async function downloadImageToLocal(imgUrl) {
+    async function downloadImageToLocal(imgUrl, throwOnFail) {
         try {
             let blob;
             if (window.__MAGNET_HELPER_EXTENSION__) {
                 try { blob = await fetchImageViaExtension(imgUrl); } catch (e) { /* fall through */ }
             }
             if (!blob) {
-                const controller = new AbortController();
-                const timer = setTimeout(() => controller.abort(), 20000);
-                try {
-                    const r = await fetch(imgUrl, { mode: 'cors', referrerPolicy: 'unsafe-url', signal: controller.signal });
-                    clearTimeout(timer);
-                    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-                    blob = await r.blob();
-                } catch (e) { clearTimeout(timer); throw e; }
+                const delays = [2000, 4000, 8000, 16000];
+                for (let retry = 0; retry <= delays.length; retry++) {
+                    const controller = new AbortController();
+                    const timer = setTimeout(() => controller.abort(), 20000);
+                    try {
+                        const r = await fetch(imgUrl, { mode: 'cors', referrerPolicy: 'unsafe-url', signal: controller.signal });
+                        clearTimeout(timer);
+                        if (r.status === 429 && retry < delays.length) {
+                            console.log(`[img] 429 等待 ${delays[retry]}ms (重试 ${retry+1}/${delays.length})`);
+                            await new Promise(r => setTimeout(r, delays[retry]));
+                            continue;
+                        }
+                        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                        blob = await r.blob();
+                        break;
+                    } catch (e) {
+                        clearTimeout(timer);
+                        if (e.name === 'AbortError') throw new Error('图片下载超时');
+                        if (e.message?.includes('429') && retry < delays.length) {
+                            console.log(`[img] 429 等待 ${delays[retry]}ms (重试 ${retry+1}/${delays.length})`);
+                            await new Promise(r => setTimeout(r, delays[retry]));
+                            continue;
+                        }
+                        throw e;
+                    }
+                }
             }
+            if (!blob) throw new Error('下载图片失败');
             return await storeImageBlob(imgUrl, blob);
-        } catch (e) { return imgUrl; }
+        } catch (e) {
+            if (throwOnFail) throw e;
+            console.log(`[img] fallback to URL: ${e.message}`);
+            return imgUrl;
+        }
     }
 
     // ===== 批量保存后异步解析元数据（分批避免限流）=====
@@ -4228,64 +4254,87 @@ function loginGDrive() {
         const total = newMagnets.length;
         showProgressModal(`🔄 正在解析卡片标题... 0/${total}`, false);
         updateProgress(0, total, 0, 0, '解析中');
-        let ok = 0, fail = 0;
+        let ok = 0, fail = 0, imgFail = 0;
         const BATCH = 3;
         const tStart = Date.now();
         console.log(`[meta] 开始解析 ${total} 张卡片 at ${new Date().toLocaleTimeString()}`);
         for (let i = 0; i < total; i += BATCH) {
             const batch = newMagnets.slice(i, i + BATCH);
             const tBatch = Date.now();
-            await Promise.all(batch.map(async (m) => {
-                for (let retries = 0; retries < 5; retries++) {
+
+            // ── Phase A: 预览 (3条并发) ──
+            const previewResults = await Promise.all(batch.map(async (m, ii) => {
+                const realIdx = i + ii;
+                const previewDelays = [10000, 20000, 40000];
+                for (let attempt = 0; attempt < 4; attempt++) {
                     const tItem = Date.now();
                     try {
                         const data = await Promise.race([
                             magnetPreviewWithFallback(m.magnetLink),
                             new Promise((_, rej) => setTimeout(() => rej(new Error('preview timeout')), 20000))
                         ]);
-                        console.log(`[meta] #${i} 预览 ${(Date.now()-tItem)}ms ${m.magnetLink.slice(0,30)}... 标题="${data?.name}"`);
+                        console.log(`[meta] #${realIdx} 预览 ${(Date.now()-tItem)}ms ${m.magnetLink.slice(0,30)}... 标题="${data?.name}"`);
                         if (data && data.name) m.title = data.name;
-                        const shots = data ? collectShots(data) : [];
-                        const first = shots.find(s => s.src && s.src.startsWith('http'));
-                        if (first) {
-                            const tImg = Date.now();
-                            try {
-                                const localId = await Promise.race([
-                                    downloadImageToLocal(first.src),
-                                    new Promise((_, rej) => setTimeout(() => rej(new Error('image dl timeout')), 25000))
-                                ]);
-                                console.log(`[meta] #${i} 图片 ${(Date.now()-tImg)}ms ${localId?.startsWith('img_')?'local':'net'}`);
-                                if (localId && localId.startsWith('img_')) m.imageUrl = localId;
-                            } catch (e) { m.imageUrl = first.src; console.log(`[meta] #${i} 图片失败 ${e.message}`); }
-                        }
                         if (data) { const rawSize = parseInt(data.size, 10); if (rawSize) m.size = formatSize(rawSize); }
-                        ok++; break;
+                        ok++;
+                        return { magnet: m, data, success: true, idx: realIdx };
                     } catch (e) {
                         if (e.message && e.message.includes('429')) {
-                            console.log(`[meta] #${i} 429 暂停 10s (重试 ${retries+1}/5)`);
-                            await new Promise(r => setTimeout(r, 10000));
+                            const wait = previewDelays[attempt] || 40000;
+                            console.log(`[meta] #${realIdx} 429 暂停 ${wait/1000}s (重试 ${attempt+1}/3)`);
+                            await new Promise(r => setTimeout(r, wait));
                             continue;
                         }
-                        console.log(`[meta] #${i} 失败 ${e.message}`);
-                        fail++; break;
+                        console.log(`[meta] #${realIdx} 预览失败 ${e.message}`);
+                        fail++;
+                        return { magnet: m, data: null, success: false, idx: realIdx, error: e.message };
                     }
                 }
+                console.log(`[meta] #${realIdx} 预览 429 重试耗尽，跳过`);
+                fail++;
+                return { magnet: m, data: null, success: false, idx: realIdx, error: '429 重试耗尽' };
             }));
+
+            // ── Phase B: 下载图片（只对预览成功的有图项）──
+            await Promise.all(previewResults.map(async (pr) => {
+                if (!pr.success || !pr.data) return;
+                const shots = collectShots(pr.data);
+                const first = shots.find(s => s.src && s.src.startsWith('http'));
+                if (!first) return;
+                const tImg = Date.now();
+                try {
+                    const localId = await downloadImageToLocal(first.src, true);
+                    console.log(`[meta] #${pr.idx} 图片 ${(Date.now()-tImg)}ms local`);
+                    if (localId && localId.startsWith('img_')) pr.magnet.imageUrl = localId;
+                } catch (e) {
+                    console.log(`[meta] #${pr.idx} 图片失败 ${e.message}`);
+                    imgFail++;
+                }
+            }));
+
             const done = Math.min(i + BATCH, total);
             console.log(`[meta] 批次完成 ${done}/${total} 耗时${(Date.now()-tBatch)}ms 累计${(Date.now()-tStart)}ms`);
             updateProgress(done, total, ok, fail, '解析中');
             const titleEl = document.getElementById('progressTitle');
             if (titleEl) titleEl.textContent = `🔄 正在解析卡片标题... ${done}/${total}`;
             try { await saveToDB(); } catch (e) {}
+            // 批间等待 2s 降低限流概率
+            if (i + BATCH < total) {
+                console.log(`[meta] 批间等待 2s...`);
+                await new Promise(r => setTimeout(r, 2000));
+            }
         }
-        console.log(`[meta] 全部完成 ${ok}/${total} 总耗时${(Date.now()-tStart)}ms`);
+        console.log(`[meta] 全部完成 预览${ok}/${total} 图片失败${imgFail} 总耗时${(Date.now()-tStart)}ms`);
         hideProgressModal();
         await saveToDB();
         updateFilteredList();
         currentLoadedCount = 0;
         await renderLoadedCards();
         updateStats(allFilteredMagnets.length, magnets.length);
-        showToast(`✅ 已解析 ${ok}/${total} 个卡片标题${fail > 0 ? `（${fail} 条失败）` : ''}`);
+        let msg = `✅ 已解析 ${ok}/${total} 个卡片标题`;
+        if (imgFail > 0) msg += `（${imgFail} 张图待补）`;
+        if (fail > 0) msg += `（${fail} 条解析失败）`;
+        showToast(msg);
     }
 
     // ===== 批量修复 hash 标题 =====
