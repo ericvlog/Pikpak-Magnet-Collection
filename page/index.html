@@ -4229,7 +4229,7 @@ function loginGDrive() {
                     const first = shots.find(s => s.src && s.src.startsWith('http'));
                     if (first) m.imageUrl = await downloadImageToLocal(first.src);
                     const rawSize = parseInt(data.size, 10);
-                    if (rawSize) m.size = rawSize;
+                    if (rawSize) m.size = formatSize(rawSize);
                 } catch (e) { /* 单条失败不影响其余 */ }
             }));
             if (i + BATCH < newMagnets.length) await new Promise(r => setTimeout(r, 1000));
