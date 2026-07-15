@@ -4233,7 +4233,7 @@ function loginGDrive() {
         for (let i = 0; i < total; i += BATCH) {
             const batch = newMagnets.slice(i, i + BATCH);
             await Promise.all(batch.map(async (m) => {
-                for (let retries = 0; retries < 3; retries++) {
+                for (let retries = 0; retries < 5; retries++) {
                     try {
                         const data = await Promise.race([
                             magnetPreviewWithFallback(m.magnetLink),
