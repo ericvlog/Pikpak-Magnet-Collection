@@ -4225,8 +4225,12 @@ function loginGDrive() {
 
     // ===== 批量保存后异步解析元数据（分批避免限流）=====
     async function resolveNewMagnetMeta(newMagnets) {
+        const total = newMagnets.length;
+        showProgressModal(`🔄 正在解析卡片标题... 0/${total}`, false);
+        updateProgress(0, total, 0, 0, '解析中');
+        let ok = 0, fail = 0;
         const BATCH = 2;
-        for (let i = 0; i < newMagnets.length; i += BATCH) {
+        for (let i = 0; i < total; i += BATCH) {
             const batch = newMagnets.slice(i, i + BATCH);
             await Promise.all(batch.map(async (m) => {
                 try {
@@ -4247,19 +4251,23 @@ function loginGDrive() {
                         } catch (e) { m.imageUrl = first.src; }
                     }
                     if (data) { const rawSize = parseInt(data.size, 10); if (rawSize) m.size = formatSize(rawSize); }
-                } catch (e) { /* 单条失败不影响其余 */ }
+                    ok++;
+                } catch (e) { fail++; }
             }));
-            // 每批完成后持久化当前进度
+            const done = Math.min(i + BATCH, total);
+            updateProgress(done, total, ok, fail, '解析中');
+            const titleEl = document.getElementById('progressTitle');
+            if (titleEl) titleEl.textContent = `🔄 正在解析卡片标题... ${done}/${total}`;
             try { await saveToDB(); } catch (e) {}
-            if (i + BATCH < newMagnets.length) await new Promise(r => setTimeout(r, 1500));
+            if (i + BATCH < total) await new Promise(r => setTimeout(r, 1500));
         }
-        // 最终更新渲染
+        hideProgressModal();
         await saveToDB();
         updateFilteredList();
         currentLoadedCount = 0;
         await renderLoadedCards();
         updateStats(allFilteredMagnets.length, magnets.length);
-        showToast(`✅ 已解析 ${newMagnets.filter(m => m.title && !/^[A-F0-9]{40}$/i.test(m.title)).length}/${newMagnets.length} 个卡片标题`);
+        showToast(`✅ 已解析 ${ok}/${total} 个卡片标题${fail > 0 ? `（${fail} 条失败）` : ''}`);
     }
 
     // ===== 批量修复 hash 标题 =====
