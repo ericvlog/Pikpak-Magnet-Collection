@@ -4230,44 +4230,55 @@ function loginGDrive() {
         updateProgress(0, total, 0, 0, '解析中');
         let ok = 0, fail = 0;
         const BATCH = 3;
+        const tStart = Date.now();
+        console.log(`[meta] 开始解析 ${total} 张卡片 at ${new Date().toLocaleTimeString()}`);
         for (let i = 0; i < total; i += BATCH) {
             const batch = newMagnets.slice(i, i + BATCH);
+            const tBatch = Date.now();
             await Promise.all(batch.map(async (m) => {
                 for (let retries = 0; retries < 5; retries++) {
+                    const tItem = Date.now();
                     try {
                         const data = await Promise.race([
                             magnetPreviewWithFallback(m.magnetLink),
                             new Promise((_, rej) => setTimeout(() => rej(new Error('preview timeout')), 20000))
                         ]);
+                        console.log(`[meta] #${i} 预览 ${(Date.now()-tItem)}ms ${m.magnetLink.slice(0,30)}... 标题="${data?.name}"`);
                         if (data && data.name) m.title = data.name;
                         const shots = data ? collectShots(data) : [];
                         const first = shots.find(s => s.src && s.src.startsWith('http'));
                         if (first) {
+                            const tImg = Date.now();
                             try {
                                 const localId = await Promise.race([
                                     downloadImageToLocal(first.src),
                                     new Promise((_, rej) => setTimeout(() => rej(new Error('image dl timeout')), 25000))
                                 ]);
+                                console.log(`[meta] #${i} 图片 ${(Date.now()-tImg)}ms ${localId?.startsWith('img_')?'local':'net'}`);
                                 if (localId && localId.startsWith('img_')) m.imageUrl = localId;
-                            } catch (e) { m.imageUrl = first.src; }
+                            } catch (e) { m.imageUrl = first.src; console.log(`[meta] #${i} 图片失败 ${e.message}`); }
                         }
                         if (data) { const rawSize = parseInt(data.size, 10); if (rawSize) m.size = formatSize(rawSize); }
                         ok++; break;
                     } catch (e) {
-                        if (e.message === '429' || (e.message && e.message.includes('429'))) {
+                        if (e.message && e.message.includes('429')) {
+                            console.log(`[meta] #${i} 429 暂停 10s (重试 ${retries+1}/5)`);
                             await new Promise(r => setTimeout(r, 10000));
                             continue;
                         }
+                        console.log(`[meta] #${i} 失败 ${e.message}`);
                         fail++; break;
                     }
                 }
             }));
             const done = Math.min(i + BATCH, total);
+            console.log(`[meta] 批次完成 ${done}/${total} 耗时${(Date.now()-tBatch)}ms 累计${(Date.now()-tStart)}ms`);
             updateProgress(done, total, ok, fail, '解析中');
             const titleEl = document.getElementById('progressTitle');
             if (titleEl) titleEl.textContent = `🔄 正在解析卡片标题... ${done}/${total}`;
             try { await saveToDB(); } catch (e) {}
         }
+        console.log(`[meta] 全部完成 ${ok}/${total} 总耗时${(Date.now()-tStart)}ms`);
         hideProgressModal();
         await saveToDB();
         updateFilteredList();
