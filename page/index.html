@@ -4229,37 +4229,44 @@ function loginGDrive() {
         showProgressModal(`🔄 正在解析卡片标题... 0/${total}`, false);
         updateProgress(0, total, 0, 0, '解析中');
         let ok = 0, fail = 0;
-        const BATCH = 2;
+        const BATCH = 3;
         for (let i = 0; i < total; i += BATCH) {
             const batch = newMagnets.slice(i, i + BATCH);
             await Promise.all(batch.map(async (m) => {
-                try {
-                    const data = await Promise.race([
-                        magnetPreviewWithFallback(m.magnetLink),
-                        new Promise((_, rej) => setTimeout(() => rej(new Error('preview timeout')), 20000))
-                    ]);
-                    if (data && data.name) m.title = data.name;
-                    const shots = data ? collectShots(data) : [];
-                    const first = shots.find(s => s.src && s.src.startsWith('http'));
-                    if (first) {
-                        try {
-                            const localId = await Promise.race([
-                                downloadImageToLocal(first.src),
-                                new Promise((_, rej) => setTimeout(() => rej(new Error('image dl timeout')), 25000))
-                            ]);
-                            if (localId && localId.startsWith('img_')) m.imageUrl = localId;
-                        } catch (e) { m.imageUrl = first.src; }
+                for (let retries = 0; retries < 3; retries++) {
+                    try {
+                        const data = await Promise.race([
+                            magnetPreviewWithFallback(m.magnetLink),
+                            new Promise((_, rej) => setTimeout(() => rej(new Error('preview timeout')), 20000))
+                        ]);
+                        if (data && data.name) m.title = data.name;
+                        const shots = data ? collectShots(data) : [];
+                        const first = shots.find(s => s.src && s.src.startsWith('http'));
+                        if (first) {
+                            try {
+                                const localId = await Promise.race([
+                                    downloadImageToLocal(first.src),
+                                    new Promise((_, rej) => setTimeout(() => rej(new Error('image dl timeout')), 25000))
+                                ]);
+                                if (localId && localId.startsWith('img_')) m.imageUrl = localId;
+                            } catch (e) { m.imageUrl = first.src; }
+                        }
+                        if (data) { const rawSize = parseInt(data.size, 10); if (rawSize) m.size = formatSize(rawSize); }
+                        ok++; break;
+                    } catch (e) {
+                        if (e.message === '429' || (e.message && e.message.includes('429'))) {
+                            await new Promise(r => setTimeout(r, 10000));
+                            continue;
+                        }
+                        fail++; break;
                     }
-                    if (data) { const rawSize = parseInt(data.size, 10); if (rawSize) m.size = formatSize(rawSize); }
-                    ok++;
-                } catch (e) { fail++; }
+                }
             }));
             const done = Math.min(i + BATCH, total);
             updateProgress(done, total, ok, fail, '解析中');
             const titleEl = document.getElementById('progressTitle');
             if (titleEl) titleEl.textContent = `🔄 正在解析卡片标题... ${done}/${total}`;
             try { await saveToDB(); } catch (e) {}
-            if (i + BATCH < total) await new Promise(r => setTimeout(r, 1500));
         }
         hideProgressModal();
         await saveToDB();
