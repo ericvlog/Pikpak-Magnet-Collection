@@ -4249,23 +4249,23 @@ function loginGDrive() {
         }
     }
 
-    // ===== 批量保存后异步解析元数据（并发池，避免单条429拖死其他）=====
+    // ===== 批量保存后异步解析元数据（串行，每张间隔3s防429）=====
     async function resolveNewMagnetMeta(newMagnets) {
         const total = newMagnets.length;
         showProgressModal(`🔄 正在解析卡片标题... 0/${total}`, false);
         updateProgress(0, total, 0, 0, '解析中');
         let ok = 0, fail = 0, imgFail = 0;
-        const CONCURRENCY = 2;
         const tStart = Date.now();
-        console.log(`[meta] 开始解析 ${total} 张卡片 at ${new Date().toLocaleTimeString()} concurrency=${CONCURRENCY}`);
+        console.log(`[meta] 开始解析 ${total} 张卡片 at ${new Date().toLocaleTimeString()} (串行 间隔3s)`);
 
-        // 处理单张卡片：预览→下载图片
-        async function processItem(m, idx) {
+        for (let idx = 0; idx < total; idx++) {
+            const m = newMagnets[idx];
+            const tItem = Date.now();
+
             // ── Phase A: 预览 ──
             const previewDelays = [10000, 20000, 40000];
             let data = null;
             for (let attempt = 0; attempt < 4; attempt++) {
-                const tItem = Date.now();
                 try {
                     data = await Promise.race([
                         magnetPreviewWithFallback(m.magnetLink),
@@ -4283,13 +4283,23 @@ function loginGDrive() {
                         continue;
                     }
                     console.log(`[meta] #${idx} 预览失败 ${e.message}`);
-                    return null;
+                    fail++;
+                    data = null; break;
                 }
             }
             if (!data) {
+                if (fail === 0 || true) { /* already counted */ }
                 console.log(`[meta] #${idx} 预览 429 重试耗尽，跳过`);
-                return null;
+                fail++;
+                updateProgress(idx + 1, total, ok, fail, '解析中');
+                const titleEl = document.getElementById('progressTitle');
+                if (titleEl) titleEl.textContent = `🔄 正在解析卡片标题... ${idx + 1}/${total}`;
+                try { await saveToDB(); } catch (e) {}
+                // 失败也等 3s
+                if (idx + 1 < total) await new Promise(r => setTimeout(r, 3000));
+                continue;
             }
+
             // ── Phase B: 下载图片 ──
             const shots = collectShots(data);
             const first = shots.find(s => s.src && s.src.startsWith('http'));
@@ -4299,45 +4309,39 @@ function loginGDrive() {
                     const localId = await downloadImageToLocal(first.src, true);
                     console.log(`[meta] #${idx} 图片 ${(Date.now()-tImg)}ms local`);
                     if (localId && localId.startsWith('img_')) m.imageUrl = localId;
+                    ok++;
                 } catch (e) {
                     console.log(`[meta] #${idx} 图片失败 ${e.message}`);
-                    return 'imgFail';
+                    ok++;
+                    imgFail++;
                 }
+            } else {
+                ok++;
             }
-            return 'ok';
-        }
 
-        // ── 并发池：3 个 worker 错峰启动 + 随机 jitter 防同步 ──
-        let nextIdx = 0;
-        async function worker() {
-            while (nextIdx < total) {
-                const idx = nextIdx++;
-                const m = newMagnets[idx];
-                const result = await processItem(m, idx);
-                if (result === 'ok') ok++;
-                else if (result === null) fail++;
-                else if (result === 'imgFail') { ok++; imgFail++; }
-
-                console.log(`[meta] 进度 ${idx+1}/${total} ok=${ok} fail=${fail} imgFail=${imgFail} 累计${(Date.now()-tStart)}ms`);
-                updateProgress(idx + 1, total, ok, fail, '解析中');
-                const titleEl = document.getElementById('progressTitle');
-                if (titleEl) titleEl.textContent = `🔄 正在解析卡片标题... ${idx + 1}/${total}`;
-                try { await saveToDB(); } catch (e) {}
-                // 随机等待 2~4s 防止 worker 同步触发 429
-                if (nextIdx < total) {
-                    const gap = 2000 + Math.random() * 2000;
-                    await new Promise(r => setTimeout(r, gap));
-                }
+            console.log(`[meta] 进度 ${idx+1}/${total} ok=${ok} fail=${fail} imgFail=${imgFail} 累计${(Date.now()-tStart)}ms`);
+            updateProgress(idx + 1, total, ok, fail, '解析中');
+            const titleEl = document.getElementById('progressTitle');
+            if (titleEl) titleEl.textContent = `🔄 正在解析卡片标题... ${idx + 1}/${total}`;
+            try { await saveToDB(); } catch (e) {}
+            // 串行间隔 3s
+            if (idx + 1 < total) {
+                await new Promise(r => setTimeout(r, 3000));
             }
         }
 
-        const pool = [];
-        for (let w = 0; w < CONCURRENCY && w < total; w++) {
-            pool.push(new Promise(resolve => {
-                setTimeout(() => resolve(worker()), w * 2000);
-            }));
-        }
-        await Promise.all(pool);
+        console.log(`[meta] 全部完成 预览${ok}/${total} 图片失败${imgFail} 总耗时${(Date.now()-tStart)}ms`);
+        hideProgressModal();
+        await saveToDB();
+        updateFilteredList();
+        currentLoadedCount = 0;
+        await renderLoadedCards();
+        updateStats(allFilteredMagnets.length, magnets.length);
+        let msg = `✅ 已解析 ${ok}/${total} 个卡片标题`;
+        if (imgFail > 0) msg += `（${imgFail} 张图待补）`;
+        if (fail > 0) msg += `（${fail} 条解析失败）`;
+        showToast(msg);
+    }
 
         console.log(`[meta] 全部完成 预览${ok}/${total} 图片失败${imgFail} 总耗时${(Date.now()-tStart)}ms`);
         hideProgressModal();
