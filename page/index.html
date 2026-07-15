@@ -4307,7 +4307,7 @@ function loginGDrive() {
             return 'ok';
         }
 
-        // ── 并发池：3 个 worker 独立从队列取任务 ──
+        // ── 并发池：3 个 worker 错峰启动 + 随机 jitter 防同步 ──
         let nextIdx = 0;
         async function worker() {
             while (nextIdx < total) {
@@ -4323,11 +4323,20 @@ function loginGDrive() {
                 const titleEl = document.getElementById('progressTitle');
                 if (titleEl) titleEl.textContent = `🔄 正在解析卡片标题... ${idx + 1}/${total}`;
                 try { await saveToDB(); } catch (e) {}
+                // 随机等待 1~3s 防止 worker 同步触发 429
+                if (nextIdx < total) {
+                    const gap = 1000 + Math.random() * 2000;
+                    await new Promise(r => setTimeout(r, gap));
+                }
             }
         }
 
         const pool = [];
-        for (let w = 0; w < CONCURRENCY && w < total; w++) pool.push(worker());
+        for (let w = 0; w < CONCURRENCY && w < total; w++) {
+            pool.push(new Promise(resolve => {
+                setTimeout(() => resolve(worker()), w * 1500);
+            }));
+        }
         await Promise.all(pool);
 
         console.log(`[meta] 全部完成 预览${ok}/${total} 图片失败${imgFail} 总耗时${(Date.now()-tStart)}ms`);
