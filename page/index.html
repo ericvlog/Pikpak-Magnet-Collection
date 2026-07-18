@@ -5375,13 +5375,13 @@ const magnetLinkEl = m.magnetLink ? `<a href="${escapeHtml(m.magnetLink)}" class
         document.getElementById('filterTypeSelect').onchange = function() {
             applyFilter(this.value);
         };
+        let dupRebuildTimer;
         const dupSlider = document.getElementById('dupFilterSlider');
         if (dupSlider) {
-            let dupTimer;
             dupSlider.addEventListener('input', function(e) {
                 document.getElementById('dupFilterValue').innerText = e.target.value + '%';
-                if (dupTimer) clearTimeout(dupTimer);
-                dupTimer = setTimeout(() => {
+                if (dupRebuildTimer) clearTimeout(dupRebuildTimer);
+                dupRebuildTimer = setTimeout(() => {
                     window._dupCache = null;
                     applyFilter('dupTitle');
                 }, 300);
@@ -5390,12 +5390,11 @@ const magnetLinkEl = m.magnetLink ? `<a href="${escapeHtml(m.magnetLink)}" class
         const dupMaxInput = document.getElementById('dupMaxGroupSize');
         if (dupMaxInput) {
             dupMaxInput.value = getDupMaxGroupSize() || '';
-            let maxTimer;
             dupMaxInput.addEventListener('input', function() {
                 const val = parseInt(this.value) || 0;
                 localStorage.setItem('_dupMaxGroupSize', val);
-                if (maxTimer) clearTimeout(maxTimer);
-                maxTimer = setTimeout(() => {
+                if (dupRebuildTimer) clearTimeout(dupRebuildTimer);
+                dupRebuildTimer = setTimeout(() => {
                     window._dupCache = null;
                     if (filterType === 'dupTitle') { updateFilteredList(); currentLoadedCount = 0; renderLoadedCards(); updateStats(allFilteredMagnets.length, magnets.length); }
                 }, 300);
