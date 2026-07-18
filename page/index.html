@@ -905,6 +905,9 @@
                 <span style="font-size:0.75rem;white-space:nowrap;">相似度</span>
                 <input type="range" id="dupFilterSlider" min="60" max="100" value="80" step="1" style="width:80px;">
                 <span id="dupFilterValue" style="font-size:0.75rem;min-width:35px;">80%</span>
+                <span style="font-size:0.75rem;white-space:nowrap;margin-left:4px;">最大组</span>
+                <input type="number" id="dupMaxGroupSize" min="0" max="999" value="0" step="1" style="width:50px;padding:2px 4px;border-radius:6px;border:1px solid var(--border-color);background:var(--input-bg);color:var(--text-primary);font-size:0.75rem;">
+                <span style="font-size:0.75rem;color:var(--text-secondary);">(0=不限)</span>
             </div>
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:nowrap;"><span style="font-size:0.8rem;white-space:nowrap;">每次加载</span><select id="pageSizeSelect" style="width:65px;"><option value="20">20</option><option value="50" selected>50</option><option value="100">100</option><option value="200">200</option></select></div>
             <button id="resetFilterBtn" class="btn btn-outline" style="white-space:nowrap;">重置</button><div id="statsDisplay" class="stats-badge">📊 0 张卡片</div>
@@ -1712,14 +1715,17 @@
     function loadDedupWhitelist() { try { return { keywords: JSON.parse(localStorage.getItem('_dedupWhitelist')||'[]'), enabled: localStorage.getItem('_dedupWhitelistEnabled')!=='false' }; } catch(e){ return { keywords: [], enabled: true }; } }
     function saveDedupWhitelist(keywords, enabled) { localStorage.setItem('_dedupWhitelist',JSON.stringify(keywords)); localStorage.setItem('_dedupWhitelistEnabled',enabled); }
     function isDedupWhitelisted(title) { const wl=loadDedupWhitelist(); if(!wl.enabled||!wl.keywords.length||!title) return false; const t=title.toLowerCase(); return wl.keywords.some(k=>k.trim()&&t.includes(k.trim().toLowerCase())); }
+    function getDupMaxGroupSize() { return parseInt(localStorage.getItem('_dupMaxGroupSize')) || 0; }
     function rebuildDupTitleCache() {
         const slider = document.getElementById('dupFilterSlider');
         const threshold = slider ? parseFloat(slider.value) / 100 : 0.8;
+        const maxGroupSize = getDupMaxGroupSize();
         const groups = findDuplicateGroups('title', threshold);
         const wl=loadDedupWhitelist();
-        const filteredGroups = wl.enabled&&wl.keywords.some(k=>k.trim())
+        let filteredGroups = wl.enabled&&wl.keywords.some(k=>k.trim())
             ? groups.map(g=>{ const items=g.items.filter(m=>!isDedupWhitelisted(m.title)); return items.length>1?{...g,items,selectedIndices:new Set(items.map((_,idx)=>idx))}:null; }).filter(Boolean)
             : groups;
+        if (maxGroupSize > 0) filteredGroups = filteredGroups.filter(g => g.items.length <= maxGroupSize);
         const dupIds = new Set();
         filteredGroups.forEach(g => g.items.forEach(item => dupIds.add(item.id)));
         window._dupCache = { threshold, groups: filteredGroups, dupIds, magnetCount: magnets.length };
@@ -5378,6 +5384,20 @@ const magnetLinkEl = m.magnetLink ? `<a href="${escapeHtml(m.magnetLink)}" class
                 dupTimer = setTimeout(() => {
                     window._dupCache = null;
                     applyFilter('dupTitle');
+                }, 300);
+            });
+        }
+        const dupMaxInput = document.getElementById('dupMaxGroupSize');
+        if (dupMaxInput) {
+            dupMaxInput.value = getDupMaxGroupSize() || '';
+            let maxTimer;
+            dupMaxInput.addEventListener('input', function() {
+                const val = parseInt(this.value) || 0;
+                localStorage.setItem('_dupMaxGroupSize', val);
+                if (maxTimer) clearTimeout(maxTimer);
+                maxTimer = setTimeout(() => {
+                    window._dupCache = null;
+                    if (filterType === 'dupTitle') { updateFilteredList(); currentLoadedCount = 0; renderLoadedCards(); updateStats(allFilteredMagnets.length, magnets.length); }
                 }, 300);
             });
         }
