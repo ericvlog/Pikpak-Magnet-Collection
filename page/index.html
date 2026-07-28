@@ -898,6 +898,8 @@
                 <option value="watchWant">👀 想看</option>
                 <option value="watchWatched">✅ 已看</option>
                 <option value="watchNone">⬜ 未标记</option>
+                <option value="watchUnwatched">👁 未观看</option>
+                <option value="bySize">📏 按大小</option>
                 <option value="dupTitle">🔗 标题相似</option>
             </select>
             <div id="dupSliderContainer" style="display:none;align-items:center;gap:6px;flex-wrap:nowrap;margin-left:4px;">
@@ -2695,6 +2697,13 @@ function bindMagnetLinkEvents() {
         if (isNaN(size)) return '0 B';
         while (size >= 1024 && i < units.length - 1) { size /= 1024; i++; }
         return (size < 10 ? size.toFixed(2) : size.toFixed(1)) + ' ' + units[i];
+    }
+    function parseSize(s) {
+        if (!s) return 0;
+        const m = s.match(/^([\d.]+)\s*(B|KB|MB|GB|TB)$/i);
+        if (!m) return 0;
+        const u = { B:1, KB:1024, MB:1048576, GB:1073741824, TB:1099511627776 };
+        return parseFloat(m[1]) * (u[m[2].toUpperCase()] || 1);
     }
 
     // ===== 多选 & 界面控制 =====
@@ -5030,6 +5039,8 @@ function updateFilteredList() {
             if (filterType === 'watchWant' && !m.wantToWatch) return false;
             if (filterType === 'watchWatched' && !m.watched) return false;
             if (filterType === 'watchNone' && (m.wantToWatch || m.watched)) return false;
+            if (filterType === 'watchUnwatched' && m.watched) return false;
+            if (filterType === 'bySize' && (!m.size || m.size === '0 B')) return false;
             if (filterType === 'dupTitle') {
                 if (!window._dupCache || window._dupCache.threshold !== parseFloat(document.getElementById('dupFilterSlider').value)/100) {
                     rebuildDupTitleCache();
@@ -5048,6 +5059,8 @@ function updateFilteredList() {
                 const gb = groupOrder.get(b.id) ?? 999;
                 return ga - gb;
             });
+        } else if (filterType === 'bySize') {
+            filtered.sort((a,b) => parseSize(b.size||'')-parseSize(a.size||''));
         } else {
             filtered.sort((a,b) => (b.createdAt||0)-(a.createdAt||0));
         }
