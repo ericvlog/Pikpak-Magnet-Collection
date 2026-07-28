@@ -5049,7 +5049,7 @@ function updateFilteredList() {
             if (filterType === 'watchWatched' && !m.watched) return false;
             if (filterType === 'watchNone' && (m.wantToWatch || m.watched)) return false;
             if (filterType === 'watchUnwatched' && m.watched) return false;
-            if (filterType === 'bySize' && (!m.size || m.size === '0 B')) return false;
+            if (filterType === 'bySize' && (!m.size || m.size === '0 B' || m.shareUrl)) return false;
             if (filterType === 'dupTitle') {
                 if (!window._dupCache || window._dupCache.threshold !== parseFloat(document.getElementById('dupFilterSlider').value)/100) {
                     rebuildDupTitleCache();
