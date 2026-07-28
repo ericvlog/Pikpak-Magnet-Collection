@@ -910,6 +910,9 @@
                 <input type="number" id="dupMaxGroupSize" min="0" max="999" value="0" step="1" style="width:50px;padding:2px 4px;border-radius:6px;border:1px solid var(--border-color);background:var(--input-bg);color:var(--text-primary);font-size:0.75rem;">
                 <span style="font-size:0.75rem;color:var(--text-secondary);">(0=不限)</span>
             </div>
+            <div id="bySizeToggleContainer" style="display:none;align-items:center;gap:6px;flex-wrap:nowrap;margin-left:4px;">
+                <button id="bySizeToggleBtn" class="btn" style="min-width:80px;padding:3px 8px;font-size:0.75rem;">🔽 大到小</button>
+            </div>
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:nowrap;"><span style="font-size:0.8rem;white-space:nowrap;">每次加载</span><select id="pageSizeSelect" style="width:65px;"><option value="20">20</option><option value="50" selected>50</option><option value="100">100</option><option value="200">200</option></select></div>
             <button id="resetFilterBtn" class="btn btn-outline" style="white-space:nowrap;">重置</button><div id="statsDisplay" class="stats-badge">📊 0 张卡片</div>
         </div>
@@ -1698,6 +1701,12 @@
     function saveDedupWhitelist(keywords, enabled) { localStorage.setItem('_dedupWhitelist',JSON.stringify(keywords)); localStorage.setItem('_dedupWhitelistEnabled',enabled); }
     function isDedupWhitelisted(title) { const wl=loadDedupWhitelist(); if(!wl.enabled||!wl.keywords.length||!title) return false; const t=title.toLowerCase(); return wl.keywords.some(k=>k.trim()&&t.includes(k.trim().toLowerCase())); }
     function getDupMaxGroupSize() { return parseInt(localStorage.getItem('_dupMaxGroupSize')) || 0; }
+    function isSizeSortAsc() { return localStorage.getItem('_sizeSortAsc') === 'true'; }
+    function updateBySizeToggleBtn(asc) {
+        const btn = document.getElementById('bySizeToggleBtn');
+        if (!btn) return;
+        btn.textContent = asc ? '🔼 小到大' : '🔽 大到小';
+    }
     function rebuildDupTitleCache() {
         const slider = document.getElementById('dupFilterSlider');
         const threshold = slider ? parseFloat(slider.value) / 100 : 0.8;
@@ -5060,7 +5069,11 @@ function updateFilteredList() {
                 return ga - gb;
             });
         } else if (filterType === 'bySize') {
-            filtered.sort((a,b) => parseSize(b.size||'')-parseSize(a.size||''));
+            const asc = isSizeSortAsc();
+            filtered.sort((a,b) => {
+                const diff = parseSize(a.size||'')-parseSize(b.size||'');
+                return asc ? diff : -diff;
+            });
         } else {
             filtered.sort((a,b) => (b.createdAt||0)-(a.createdAt||0));
         }
@@ -5355,10 +5368,17 @@ const magnetLinkEl = m.magnetLink ? `<a href="${escapeHtml(m.magnetLink)}" class
             filterType = type;
             document.getElementById('filterTypeSelect').value = type;
             const container = document.getElementById('dupSliderContainer');
+            const sizeToggle = document.getElementById('bySizeToggleContainer');
             if (type === 'dupTitle') {
                 container.style.display = 'flex';
+                sizeToggle.style.display = 'none';
+            } else if (type === 'bySize') {
+                container.style.display = 'none';
+                sizeToggle.style.display = 'flex';
+                updateBySizeToggleBtn(isSizeSortAsc());
             } else {
                 container.style.display = 'none';
+                sizeToggle.style.display = 'none';
             }
             updateFilteredList();
             currentLoadedCount = 0;
@@ -5392,6 +5412,15 @@ const magnetLinkEl = m.magnetLink ? `<a href="${escapeHtml(m.magnetLink)}" class
                     if (filterType === 'dupTitle') { updateFilteredList(); currentLoadedCount = 0; renderLoadedCards(); updateStats(allFilteredMagnets.length, magnets.length); }
                 }, 300);
             });
+        }
+        const bySizeToggle = document.getElementById('bySizeToggleBtn');
+        if (bySizeToggle) {
+            bySizeToggle.onclick = () => {
+                const asc = !isSizeSortAsc();
+                localStorage.setItem('_sizeSortAsc', asc);
+                updateBySizeToggleBtn(asc);
+                if (filterType === 'bySize') { updateFilteredList(); currentLoadedCount = 0; renderLoadedCards(); updateStats(allFilteredMagnets.length, magnets.length); }
+            };
         }
     }
 
