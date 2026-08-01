@@ -5040,7 +5040,7 @@ function updateFilteredList() {
             if (filterType === 'noTag' && m.tagIds && m.tagIds.length > 0) return false;
             if (filterType === 'hasImg' && (!m.imageUrl || (m.imageUrl.startsWith('img_') && !validImageIds.has(m.imageUrl)))) return false;
             if (filterType === 'netImg' && (!m.imageUrl || m.imageUrl.startsWith('img_'))) return false;
-            if (filterType === 'noImg' && m.imageUrl) return false;
+            if (filterType === 'noImg' && (m.imageUrl || (m.extraImages && m.extraImages.length))) return false;
             if (filterType === 'telegram') {
                 const hasTelegram = m.fileId || (m.fileIds && m.fileIds.length > 0) || m.messageUrl;
                 if (!hasTelegram) return false;
